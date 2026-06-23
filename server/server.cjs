@@ -611,7 +611,7 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
 // Serve static assets in production (or if build folder exists)
 if (process.env.NODE_ENV === 'production' || fs.existsSync(path.join(__dirname, '../dist'))) {
   app.use(express.static(path.join(__dirname, '../dist')));
-  app.get('*', (req, res) => {
+  app.get('*any', (req, res) => {
     if (req.path.startsWith('/api')) {
       return res.status(404).json({ error: 'API endpoint not found.' });
     }

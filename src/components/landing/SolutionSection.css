@@ -68,6 +68,12 @@
   height: 40px;
   background: linear-gradient(to bottom, var(--step-color, var(--accent-blue)), rgba(255, 255, 255, 0.05));
   margin: var(--space-1) 0;
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.solution-step:hover .step-connector {
+  background: linear-gradient(to bottom, var(--step-color, var(--accent-blue)), var(--step-color));
+  opacity: 0.8;
 }
 
 .step-content {
@@ -85,6 +91,46 @@
 .step-desc {
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+@media (min-width: 1024px) {
+  .solution-flow {
+    max-width: 1200px;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  .solution-step {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    gap: var(--space-4);
+  }
+
+  .step-node {
+    width: 100%;
+    position: relative;
+  }
+
+  .step-connector {
+    position: absolute;
+    left: calc(50% + 32px);
+    top: 32px;
+    width: calc(100% - 64px);
+    height: 2px;
+    background: linear-gradient(to right, var(--step-color, var(--accent-blue)), rgba(255, 255, 255, 0.05));
+    margin: 0;
+  }
+
+  .solution-step:hover .step-connector {
+    background: linear-gradient(to right, var(--step-color, var(--accent-blue)), var(--step-color));
+  }
+
+  .step-content {
+    padding: var(--space-2) var(--space-4);
+  }
 }
 
 @media (max-width: 640px) {

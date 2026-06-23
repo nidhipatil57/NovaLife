@@ -37,7 +37,7 @@
   right: -10%;
   filter: blur(120px);
   opacity: 0.15;
-  animation: auroraShift 8s ease-in-out infinite 3s;
+  animation: auroraShift 8s ease-in-out infinite -3s;
 }
 
 .auth-stars {

@@ -69,12 +69,12 @@ export default function LoginPage() {
 
       {/* Stars */}
       <div className="auth-stars">
-        {Array.from({ length: 30 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="star" style={{
             left: `${Math.random() * 100}%`,
             top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 5}s`,
-            animationDuration: `${2 + Math.random() * 3}s`,
+            animationDelay: `${Math.random() * 10}s`,
+            animationDuration: `${6 + Math.random() * 6}s`,
             width: `${1 + Math.random() * 2}px`,
             height: `${1 + Math.random() * 2}px`,
           }} />

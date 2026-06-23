@@ -36,14 +36,14 @@ export default function ParticleField() {
     resize();
     window.addEventListener('resize', resize);
 
-    // Initialize particles
+    // Initialize particles with an extremely slow, calming default drift
     const count = Math.min(80, Math.floor(window.innerWidth / 20));
     for (let i = 0; i < count; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
+        vx: (Math.random() - 0.5) * 0.05, // Slow, peaceful autonomous float
+        vy: (Math.random() - 0.5) * 0.05, // Slow, peaceful autonomous float
         size: Math.random() * 2 + 0.5,
         opacity: Math.random() * 0.5 + 0.1,
         color: colors[Math.floor(Math.random() * colors.length)],
@@ -54,9 +54,11 @@ export default function ParticleField() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles.forEach((p, i) => {
+        // Update positions smoothly
         p.x += p.vx;
         p.y += p.vy;
 
+        // Wrap around borders
         if (p.x < 0) p.x = canvas.width;
         if (p.x > canvas.width) p.x = 0;
         if (p.y < 0) p.y = canvas.height;
