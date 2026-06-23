@@ -1,0 +1,92 @@
+.achievement-section {
+  background: var(--bg-primary);
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-6);
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.achievement-card {
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.achievement-card:hover {
+  border-color: var(--ach-color);
+}
+
+.achievement-card:hover .ach-ring {
+  transform: scale(1.2);
+  opacity: 0.6;
+  box-shadow: 0 0 30px color-mix(in srgb, var(--ach-color) 40%, transparent);
+}
+
+.achievement-card:hover .ach-sparkle {
+  opacity: 1;
+  transform: scale(1) rotate(15deg);
+}
+
+.ach-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.ach-icon {
+  font-size: 42px;
+  position: relative;
+  z-index: 2;
+}
+
+.ach-ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid var(--ach-color);
+  opacity: 0.3;
+  transition: all var(--duration-slow) var(--ease-out);
+}
+
+.ach-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  margin-bottom: var(--space-2);
+  color: var(--text-primary);
+}
+
+.ach-desc {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.ach-sparkle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 16px;
+  color: var(--ach-color);
+  opacity: 0;
+  transform: scale(0) rotate(0deg);
+  transition: all var(--duration-slow) var(--ease-spring);
+}
+
+@media (max-width: 768px) {
+  .achievement-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .achievement-grid {
+    grid-template-columns: 1fr;
+  }
+}

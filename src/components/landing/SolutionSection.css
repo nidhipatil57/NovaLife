@@ -1,0 +1,103 @@
+.solution-section {
+  position: relative;
+  background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+}
+
+.solution-flow {
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.solution-step {
+  display: flex;
+  gap: var(--space-6);
+  position: relative;
+}
+
+.step-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.step-icon-wrapper {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 2px solid var(--step-color, var(--accent-blue));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all var(--duration-normal) var(--ease-out);
+  z-index: 2;
+}
+
+.solution-step:hover .step-icon-wrapper {
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 25px color-mix(in srgb, var(--step-color) 30%, transparent);
+  transform: scale(1.1);
+}
+
+.step-icon {
+  font-size: 24px;
+}
+
+.step-number {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--step-color, var(--accent-blue));
+  color: white;
+  font-size: 10px;
+  font-weight: var(--font-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-connector {
+  width: 2px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--step-color, var(--accent-blue)), rgba(255, 255, 255, 0.05));
+  margin: var(--space-1) 0;
+}
+
+.step-content {
+  padding: var(--space-4) 0;
+  padding-bottom: var(--space-8);
+}
+
+.step-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+}
+
+.step-desc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .solution-flow {
+    padding-left: var(--space-4);
+  }
+
+  .step-icon-wrapper {
+    width: 52px;
+    height: 52px;
+  }
+
+  .step-icon {
+    font-size: 20px;
+  }
+}
