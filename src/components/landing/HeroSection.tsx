@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './HeroSection.css';
 
-export default function HeroSection() {
+export default function HeroSection({ onWatchDemoClick }: { onWatchDemoClick?: () => void }) {
   const orbRef = useRef<HTMLDivElement>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -27,15 +27,15 @@ export default function HeroSection() {
 
       {/* Star Field */}
       <div className="hero-stars">
-        {Array.from({ length: 50 }).map((_, i) => (
+        {Array.from({ length: 12 }).map((_, i) => (
           <div
             key={i}
             className="star"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${2 + Math.random() * 3}s`,
+              animationDelay: `${Math.random() * 10}s`,
+              animationDuration: `${6 + Math.random() * 6}s`,
               width: `${1 + Math.random() * 2}px`,
               height: `${1 + Math.random() * 2}px`,
             }}
@@ -46,29 +46,25 @@ export default function HeroSection() {
       <div className="hero-content container">
         {/* Left Side */}
         <div className="hero-left animate-fade-up">
-          <div className="hero-badge">
-            <span className="hero-badge-dot"></span>
-            AI-Powered Productivity OS
-          </div>
+
 
           <h1 className="hero-title">
             Meet <span className="gradient-text-aurora">NovaLife</span>
           </h1>
 
           <p className="hero-subtitle">
-            An AI companion that plans, prioritizes and helps you actually 
-            <span className="hero-highlight"> get things done.</span>
+            An AI productivity companion that doesn't just remind — it actively plans, prioritizes, and helps users execute before deadlines are missed. A personal intelligence platform designed for students, professionals, and entrepreneurs.
           </p>
 
           <div className="hero-cta">
-            <Link to="/signup" className="btn-primary btn-lg hero-btn-primary">
+            <Link to="/signup" className="btn-primary hero-btn-primary">
               <span>Start Free</span>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
             </Link>
-            <button className="btn-secondary btn-lg hero-btn-secondary">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <button onClick={onWatchDemoClick} className="btn-secondary hero-btn-secondary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
               </svg>
               <span>Watch Demo</span>
@@ -109,7 +105,7 @@ export default function HeroSection() {
             className="orb-container"
             ref={orbRef}
             style={{
-              transform: `translate(${mousePos.x * 15}px, ${mousePos.y * 15}px)`,
+              transform: `translate(${mousePos.x * 4}px, ${mousePos.y * 4}px)`,
             }}
           >
             <div className="orb">

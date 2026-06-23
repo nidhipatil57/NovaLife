@@ -170,10 +170,8 @@
 }
 
 @keyframes particleDrift {
-  0%, 100% { transform: translate(0, 0); }
-  25% { transform: translate(30px, -30px); }
-  50% { transform: translate(-20px, -60px); }
-  75% { transform: translate(10px, -30px); }
+  0%, 100% { transform: rotate(var(--angle)) translateX(var(--distance)) translate(0, 0); }
+  50% { transform: rotate(var(--angle)) translateX(var(--distance)) translate(15px, -15px); }
 }
 
 @keyframes starTwinkle {

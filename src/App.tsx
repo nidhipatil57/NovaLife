@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import ParticleField from './effects/ParticleField';
 import CursorGlow from './effects/CursorGlow';
 
@@ -26,9 +27,20 @@ import BrainDumpPage from './pages/BrainDumpPage';
 import RescueModePage from './pages/RescueModePage';
 import FutureTimelinePage from './pages/FutureTimelinePage';
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
 function App() {
   return (
     <Router>
+      <ScrollToTop />
       <ParticleField />
       <CursorGlow />
       <Routes>

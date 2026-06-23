@@ -9,14 +9,7 @@ const features = [
     tag: 'CORE',
     color: 'var(--accent-blue)',
     demo: 'task-command',
-  },
-  {
-    icon: '🚨',
-    title: 'Deadline Rescue Mode',
-    desc: 'When a deadline is at risk, NovaLife enters emergency mode — rebuilds your schedule, removes distractions, and creates an action sprint.',
-    tag: 'UNIQUE',
-    color: 'var(--accent-red)',
-    demo: 'rescue',
+    gradient: 'linear-gradient(135deg, var(--accent-blue), var(--accent-cyan))',
   },
   {
     icon: '📊',
@@ -25,22 +18,7 @@ const features = [
     tag: 'AI',
     color: 'var(--accent-purple)',
     demo: 'priority',
-  },
-  {
-    icon: '📅',
-    title: 'AI Calendar Autopilot',
-    desc: 'Connects to Google Calendar, Outlook & Apple Calendar. Auto time-blocking, meeting protection, deep work sessions.',
-    tag: 'SYNC',
-    color: 'var(--accent-cyan)',
-    demo: 'calendar',
-  },
-  {
-    icon: '💬',
-    title: 'AI Life Chatbot',
-    desc: '"Plan my day." "Help me study." "What should I do next?" Your personal AI assistant, always ready.',
-    tag: 'CHAT',
-    color: 'var(--accent-pink)',
-    demo: 'chatbot',
+    gradient: 'linear-gradient(135deg, var(--accent-purple), var(--accent-pink))',
   },
   {
     icon: '🎯',
@@ -49,22 +27,7 @@ const features = [
     tag: 'GOALS',
     color: 'var(--accent-green)',
     demo: 'goals',
-  },
-  {
-    icon: '🔄',
-    title: 'Habit Engine',
-    desc: 'Track water, reading, exercise, sleep, and meditation. Build streaks, get daily scores, and AI recommendations.',
-    tag: 'HABITS',
-    color: 'var(--accent-orange)',
-    demo: 'habits',
-  },
-  {
-    icon: '🎧',
-    title: 'Focus Mode',
-    desc: 'Distraction-free environment with Pomodoro timer, ambient soundscapes, productivity insights, and fullscreen focus.',
-    tag: 'FOCUS',
-    color: 'var(--accent-blue)',
-    demo: 'focus',
+    gradient: 'linear-gradient(135deg, var(--accent-green), var(--accent-cyan))',
   },
   {
     icon: '🎙️',
@@ -73,6 +36,16 @@ const features = [
     tag: 'VOICE',
     color: 'var(--accent-purple)',
     demo: 'voice',
+    gradient: 'linear-gradient(135deg, var(--accent-purple), var(--accent-blue))',
+  },
+  {
+    icon: '📅',
+    title: 'AI Calendar Autopilot',
+    desc: 'Connects to Google Calendar, Outlook & Apple Calendar. Auto time-blocking, meeting protection, deep work sessions.',
+    tag: 'SYNC',
+    color: 'var(--accent-cyan)',
+    demo: 'calendar',
+    gradient: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-blue))',
   },
   {
     icon: '📈',
@@ -81,6 +54,43 @@ const features = [
     tag: 'SCORE',
     color: 'var(--accent-cyan)',
     demo: 'score',
+    gradient: 'linear-gradient(135deg, var(--accent-cyan), var(--accent-green))',
+  },
+  {
+    icon: '💬',
+    title: 'AI Life Chatbot',
+    desc: '"Plan my day." "Help me study." "What should I do next?" Your personal AI assistant, always ready.',
+    tag: 'CHAT',
+    color: 'var(--accent-pink)',
+    demo: 'chatbot',
+    gradient: 'linear-gradient(135deg, var(--accent-pink), var(--accent-purple))',
+  },
+  {
+    icon: '🚨',
+    title: 'Deadline Rescue Mode',
+    desc: 'When a deadline is at risk, NovaLife enters emergency mode — rebuilds your schedule, removes distractions, and creates an action sprint.',
+    tag: 'UNIQUE',
+    color: 'var(--accent-red)',
+    demo: 'rescue',
+    gradient: 'linear-gradient(135deg, var(--accent-red), var(--accent-orange))',
+  },
+  {
+    icon: '🎧',
+    title: 'Focus Mode',
+    desc: 'Distraction-free environment with Pomodoro timer, ambient soundscapes, productivity insights, and fullscreen focus.',
+    tag: 'FOCUS',
+    color: 'var(--accent-blue)',
+    demo: 'focus',
+    gradient: 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))',
+  },
+  {
+    icon: '🔄',
+    title: 'Habit Engine',
+    desc: 'Track water, reading, exercise, sleep, and meditation. Build streaks, get daily scores, and AI recommendations.',
+    tag: 'HABITS',
+    color: 'var(--accent-orange)',
+    demo: 'habits',
+    gradient: 'linear-gradient(135deg, var(--accent-orange), var(--accent-red))',
   },
 ];
 
@@ -203,13 +213,16 @@ export default function FeaturesSection() {
               className={`feature-card glass-card scroll-animate stagger-${(i % 5) + 1} ${isVisible ? 'visible' : ''}`}
               style={{ '--feature-color': f.color } as React.CSSProperties}
             >
-              <div className="feature-header">
-                <span className="feature-icon">{f.icon}</span>
-                <span className="feature-tag" style={{ color: f.color, borderColor: f.color }}>{f.tag}</span>
+              <div className="feature-gradient-bar" style={{ background: f.gradient }}></div>
+              <div className="feature-content">
+                <div className="feature-header">
+                  <span className="feature-icon">{f.icon}</span>
+                  <span className="feature-tag" style={{ color: f.color, borderColor: f.color }}>{f.tag}</span>
+                </div>
+                <h3 className="feature-title">{f.title}</h3>
+                <p className="feature-desc">{f.desc}</p>
+                <FeatureMiniDemo demo={f.demo} color={f.color} />
               </div>
-              <h3 className="feature-title">{f.title}</h3>
-              <p className="feature-desc">{f.desc}</p>
-              <FeatureMiniDemo demo={f.demo} color={f.color} />
               <div className="feature-glow" style={{ background: f.color }}></div>
             </div>
           ))}
