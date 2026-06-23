@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import './SettingsPage.css';
 
 const themes = [
@@ -18,6 +20,21 @@ const aiPersonalities = [
 export default function SettingsPage() {
   const [aiMode, setAiMode] = useState('Motivational');
   const [notifications, setNotifications] = useState({ email: true, push: true, desktop: true, sms: false });
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
+  const userEmail = user?.email || 'user@example.com';
+  const userInitials = displayName.charAt(0).toUpperCase();
 
   return (
     <div className="settings-page">
@@ -33,15 +50,15 @@ export default function SettingsPage() {
         <div className="settings-section widget">
           <h4>👤 Profile</h4>
           <div className="profile-card">
-            <div className="profile-avatar">N</div>
+            <div className="profile-avatar">{userInitials}</div>
             <div className="profile-info">
               <div className="form-row">
                 <label>Name</label>
-                <input type="text" defaultValue="Nidhi" className="settings-input" />
+                <input type="text" defaultValue={displayName} className="settings-input" />
               </div>
               <div className="form-row">
                 <label>Email</label>
-                <input type="email" defaultValue="nidhi@example.com" className="settings-input" />
+                <input type="email" defaultValue={userEmail} className="settings-input" />
               </div>
               <div className="form-row">
                 <label>Bio</label>
@@ -128,6 +145,7 @@ export default function SettingsPage() {
           <div className="privacy-actions">
             <button className="btn-secondary btn-sm">📥 Export Data</button>
             <button className="btn-secondary btn-sm">🔑 Change Password</button>
+            <button className="btn-secondary btn-sm" onClick={handleLogout} style={{ color: 'var(--accent-orange, #ff9f43)' }}>🚪 Log Out</button>
             <button className="btn-secondary btn-sm" style={{ color: 'var(--accent-red)' }}>🗑️ Delete Account</button>
           </div>
         </div>

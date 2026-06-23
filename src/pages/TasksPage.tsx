@@ -1,23 +1,6 @@
 import { useState } from 'react';
+import { useTasks, type Task } from '../hooks/useTasks';
 import './TasksPage.css';
-
-type Task = {
-  id: number; text: string; done: boolean; priority: 'critical' | 'high' | 'medium' | 'low';
-  due: string; category: string; subtasks?: string[]; risk?: number; aiGenerated?: boolean;
-};
-
-const initialTasks: Task[] = [
-  { id: 1, text: 'Complete Physics Assignment', done: false, priority: 'critical', due: 'Today, 11:59 PM', category: 'Academic', subtasks: ['Chapter 5 Problems', 'Lab Report Section', 'Review Formulas'], risk: 90 },
-  { id: 2, text: 'Team Meeting Prep', done: false, priority: 'high', due: 'Today, 4:00 PM', category: 'Work', subtasks: ['Review agenda', 'Prepare slides'] },
-  { id: 3, text: 'Study for Math Test', done: false, priority: 'high', due: 'Tomorrow, 9:00 AM', category: 'Academic', subtasks: ['Chapter 3', 'Chapter 4', 'Practice problems'], risk: 65 },
-  { id: 4, text: 'Reply to Prof. Email', done: true, priority: 'low', due: 'Done', category: 'Academic' },
-  { id: 5, text: 'Gym Session', done: false, priority: 'medium', due: 'Today, 7:00 PM', category: 'Health' },
-  { id: 6, text: 'Project Presentation', done: false, priority: 'medium', due: 'Wednesday', category: 'Work', subtasks: ['Create slides', 'Practice delivery', 'Prepare Q&A'] },
-  { id: 7, text: 'Chapter 1 Revision', done: false, priority: 'high', due: 'Thursday', category: 'Academic', aiGenerated: true },
-  { id: 8, text: 'Mock Test — Physics', done: false, priority: 'medium', due: 'Friday', category: 'Academic', aiGenerated: true },
-  { id: 9, text: 'Buy Groceries', done: false, priority: 'low', due: 'Saturday', category: 'Personal' },
-  { id: 10, text: 'Update Resume', done: true, priority: 'medium', due: 'Done', category: 'Career' },
-];
 
 const priorityConfig = {
   critical: { label: '🔥 Critical', color: 'var(--accent-red)', bg: 'rgba(239,68,68,0.1)' },
@@ -26,13 +9,65 @@ const priorityConfig = {
   low: { label: '💤 Low', color: 'var(--accent-green)', bg: 'rgba(16,185,129,0.1)' },
 };
 
+const categories = ['Academic', 'Work', 'Health', 'Personal', 'Career', 'Finance', 'General'];
+
 export default function TasksPage() {
-  const [tasks, setTasks] = useState(initialTasks);
+  const { tasks, loading, user, addTask, toggleTask, deleteTask } = useTasks();
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'ai'>('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  
+  // Add Task Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newText, setNewText] = useState('');
+  const [newPriority, setNewPriority] = useState<Task['priority']>('medium');
+  const [newCategory, setNewCategory] = useState('General');
+  const [newDue, setNewDue] = useState('Today');
+  const [newSubtaskInput, setNewSubtaskInput] = useState('');
 
-  const toggleTask = (id: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  const handleToggleTask = async (id: string, currentDone: boolean) => {
+    try {
+      await toggleTask(id, !currentDone);
+    } catch (err) {
+      alert('Failed to update task.');
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newText.trim()) return;
+
+    try {
+      const subtasks = newSubtaskInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      // Estimate a random risk score for demo/AI purposes if it is critical/high
+      const risk = newPriority === 'critical' ? 85 : newPriority === 'high' ? 60 : undefined;
+
+      await addTask({
+        text: newText,
+        done: false,
+        priority: newPriority,
+        category: newCategory,
+        due: newDue,
+        subtasks: subtasks.length > 0 ? subtasks : undefined,
+        risk,
+        aiGenerated: false,
+      });
+
+      // Reset Form
+      setNewText('');
+      setNewPriority('medium');
+      setNewCategory('General');
+      setNewDue('Today');
+      setNewSubtaskInput('');
+      setShowAddModal(false);
+    } catch (err) {
+      alert('Failed to create task.');
+    }
+  };
 
   const filteredTasks = tasks.filter(t => {
     if (filter === 'active') return !t.done;
@@ -48,6 +83,17 @@ export default function TasksPage() {
     low: filteredTasks.filter(t => t.priority === 'low' && !t.done),
   };
 
+  if (!user) {
+    return (
+      <div className="tasks-page" style={{ justifyContent: 'center', alignItems: 'center', display: 'flex', minHeight: '60vh' }}>
+        <div className="widget glass-card-static" style={{ padding: '40px', textAlign: 'center', maxWidth: '480px' }}>
+          <h3>🔒 Authentication Required</h3>
+          <p style={{ marginTop: '12px', marginBottom: '24px' }}>Please log in using Google or email on the login page to manage your personal tasks.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="tasks-page">
       <div className="page-header">
@@ -60,7 +106,7 @@ export default function TasksPage() {
             <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>☰ List</button>
             <button className={view === 'kanban' ? 'active' : ''} onClick={() => setView('kanban')}>▦ Board</button>
           </div>
-          <button className="btn-primary btn-sm">+ New Task</button>
+          <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ New Task</button>
         </div>
       </div>
 
@@ -77,8 +123,24 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {/* Kanban View */}
-      {view === 'kanban' ? (
+      {loading ? (
+        <div className="loading-state" style={{ textAlign: 'center', padding: '60px' }}>
+          <div className="ai-onboard-avatar" style={{ margin: '0 auto 20px auto', width: '40px', height: '40px' }}></div>
+          <p>Synchronizing with Firestore Database...</p>
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="empty-state widget glass-card-static" style={{ textAlign: 'center', padding: '50px 30px', margin: '20px 0' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+          <h4>No Tasks Found</h4>
+          <p style={{ maxWidth: '400px', margin: '10px auto 24px auto', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+            Your cloud database is empty. Click "+ Add New Task" to start organizing your life!
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ Add New Task</button>
+          </div>
+        </div>
+      ) : view === 'kanban' ? (
+        /* Kanban Board View */
         <div className="kanban-board">
           {(Object.keys(kanbanGroups) as Array<keyof typeof kanbanGroups>).map(priority => (
             <div key={priority} className="kanban-column">
@@ -107,7 +169,7 @@ export default function TasksPage() {
         <div className="task-list-full">
           {filteredTasks.map(task => (
             <div key={task.id} className={`task-list-item widget ${task.done ? 'task-done' : ''}`} onClick={() => setSelectedTask(task)}>
-              <div className="task-check-lg" onClick={(e) => { e.stopPropagation(); toggleTask(task.id); }}>
+              <div className="task-check-lg" onClick={(e) => { e.stopPropagation(); handleToggleTask(task.id, task.done); }}>
                 <div className={`check-circle ${task.done ? 'checked' : ''}`}>{task.done && '✓'}</div>
               </div>
               <div className="task-main-info">
@@ -118,7 +180,7 @@ export default function TasksPage() {
                 <div className="task-meta">
                   <span className="task-category-tag">{task.category}</span>
                   <span className="task-due-tag">{task.due}</span>
-                  {task.subtasks && <span className="task-subtask-count">{task.subtasks.length} subtasks</span>}
+                  {task.subtasks && task.subtasks.length > 0 && <span className="task-subtask-count">{task.subtasks.length} subtasks</span>}
                 </div>
               </div>
               <div className="task-right">
@@ -151,7 +213,7 @@ export default function TasksPage() {
                 <span>📅 {selectedTask.due}</span>
               </div>
             </div>
-            {selectedTask.subtasks && (
+            {selectedTask.subtasks && selectedTask.subtasks.length > 0 && (
               <div className="detail-section">
                 <h5>Subtasks</h5>
                 <div className="subtask-list">
@@ -186,6 +248,138 @@ export default function TasksPage() {
                 <p>Start this task now during your peak focus window (2-4 PM). Estimated completion: 2 hours. Break into 25-min sprints with 5-min breaks.</p>
               </div>
             </div>
+            
+            {/* Delete button */}
+            <div style={{ marginTop: '30px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                className="btn-secondary btn-sm" 
+                style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)' }}
+                onClick={() => {
+                  deleteTask(selectedTask.id);
+                  setSelectedTask(null);
+                }}
+              >
+                🗑️ Delete Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task Modal Overlay */}
+      {showAddModal && (
+        <div className="task-detail-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="task-detail-panel widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <button className="detail-close" onClick={() => setShowAddModal(false)}>✕</button>
+            <div className="detail-header" style={{ marginBottom: '24px' }}>
+              <h3>Create New Task</h3>
+              <p>Add a task to your Cloud Firestore database</p>
+            </div>
+            
+            <form onSubmit={handleCreateTask} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Task Name</label>
+                <input 
+                  type="text" 
+                  value={newText} 
+                  onChange={e => setNewText(e.target.value)}
+                  placeholder="e.g. Finish Physics Lab Report" 
+                  required
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Priority</label>
+                  <select 
+                    value={newPriority} 
+                    onChange={e => setNewPriority(e.target.value as Task['priority'])}
+                    style={{
+                      padding: '12px',
+                      background: '#0E1628',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'white',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="low">💤 Low</option>
+                    <option value="medium">📌 Medium</option>
+                    <option value="high">⚡ High</option>
+                    <option value="critical">🔥 Critical</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Category</label>
+                  <select 
+                    value={newCategory} 
+                    onChange={e => setNewCategory(e.target.value)}
+                    style={{
+                      padding: '12px',
+                      background: '#0E1628',
+                      border: '1px solid var(--glass-border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'white',
+                      outline: 'none'
+                    }}
+                  >
+                    {categories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Due Date description</label>
+                <input 
+                  type="text" 
+                  value={newDue} 
+                  onChange={e => setNewDue(e.target.value)}
+                  placeholder="e.g. Today, 11:59 PM or Tomorrow" 
+                  required
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Subtasks (comma-separated)</label>
+                <input 
+                  type="text" 
+                  value={newSubtaskInput} 
+                  onChange={e => setNewSubtaskInput(e.target.value)}
+                  placeholder="e.g. Chapter 3 Exercises, Chapter 4 Exercises"
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <button type="submit" className="btn-primary" style={{ marginTop: '12px', padding: '14px' }}>
+                Create Task
+              </button>
+            </form>
           </div>
         </div>
       )}

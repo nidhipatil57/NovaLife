@@ -1,5 +1,6 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import './DashboardLayout.css';
 
 const navItems = [
@@ -89,6 +90,20 @@ function AIChatbot() {
 export default function DashboardLayout() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
+  const userInitials = displayName.charAt(0).toUpperCase();
 
   return (
     <div className={`dashboard-layout ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -128,15 +143,37 @@ export default function DashboardLayout() {
 
         <div className="sidebar-footer">
           {!collapsed ? (
-            <div className="sidebar-user">
-              <div className="user-avatar-small">N</div>
-              <div>
-                <div className="user-name">Nidhi</div>
-                <div className="user-plan">Pro Plan</div>
+            <div className="sidebar-user" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div className="user-avatar-small">{userInitials}</div>
+                <div>
+                  <div className="user-name" style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+                  <div className="user-plan">Pro Plan</div>
+                </div>
               </div>
+              <button 
+                onClick={handleLogout} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', fontSize: '1.1rem', transition: 'transform 0.2s' }} 
+                title="Log Out"
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                🚪
+              </button>
             </div>
           ) : (
-            <div className="user-avatar-small" style={{ margin: '0 auto' }}>N</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%' }}>
+              <div className="user-avatar-small" style={{ margin: '0 auto' }}>{userInitials}</div>
+              <button 
+                onClick={handleLogout} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '1rem', color: 'var(--text-secondary)', transition: 'transform 0.2s' }} 
+                title="Log Out"
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                🚪
+              </button>
+            </div>
           )}
         </div>
       </aside>

@@ -1,32 +1,81 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTasks } from '../hooks/useTasks';
+import { useHabits } from '../hooks/useHabits';
+import { useGoals } from '../hooks/useGoals';
 import './DashboardHome.css';
 
 export default function DashboardHome() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
 
+  const { tasks, loading: tasksLoading, toggleTask, user } = useTasks();
+  const { habits, loading: habitsLoading, toggleHabitDay } = useHabits();
+  const { goals, loading: goalsLoading } = useGoals();
+
+  const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
+
+  // Calculations for daily briefing
+  const activeTasks = tasks.filter(t => !t.done);
+  const highPriorityCount = activeTasks.filter(t => t.priority === 'critical' || t.priority === 'high').length;
+  const atRiskCount = activeTasks.filter(t => t.risk && t.risk > 70).length;
+
+  const totalTasksCount = tasks.length;
+  const completedTasksCount = tasks.filter(t => t.done).length;
+  const taskScore = totalTasksCount > 0 ? (completedTasksCount / totalTasksCount) * 100 : 100;
+
+  const habitScore = habits.length > 0 ? habits.reduce((acc, h) => acc + h.rate, 0) / habits.length : 100;
+  
+  // Overall dynamic productivity score
+  const productivityScore = habits.length === 0 && tasks.length === 0 
+    ? 0 
+    : Math.round((taskScore + habitScore) / 2);
+
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
+
+  if (!user) {
+    return (
+      <div className="dash-home" style={{ justifyContent: 'center', alignItems: 'center', display: 'flex', minHeight: '60vh' }}>
+        <div className="widget glass-card-static" style={{ padding: '40px', textAlign: 'center', maxWidth: '480px' }}>
+          <h3>🔒 Authentication Required</h3>
+          <p style={{ marginTop: '12px', marginBottom: '24px' }}>Please log in using Google or email on the login page to access your personal dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const isLoading = tasksLoading || habitsLoading || goalsLoading;
+
   return (
     <div className="dash-home">
       {/* AI Daily Briefing */}
       <div className="briefing-card widget">
         <div className="briefing-left">
-          <h2 className="dash-greeting">{greeting}, <span className="gradient-text">Nidhi</span> 👋</h2>
-          <p className="briefing-summary">
-            You have <strong style={{ color: 'var(--accent-red-light)' }}>2 high-priority tasks</strong> and{' '}
-            <strong style={{ color: 'var(--accent-orange-light)' }}>1 deadline at risk</strong> today.
-          </p>
+          <h2 className="dash-greeting">{greeting}, <span className="gradient-text">{displayName}</span> 👋</h2>
+          {isLoading ? (
+            <p className="briefing-summary">Synchronizing data with Cloud Firestore...</p>
+          ) : tasks.length === 0 && habits.length === 0 && goals.length === 0 ? (
+            <p className="briefing-summary">
+              Welcome to NovaLife! Your workspace is fresh and clean. Start by adding a task or tracking a habit.
+            </p>
+          ) : (
+            <p className="briefing-summary">
+              You have <strong style={{ color: 'var(--accent-red-light)' }}>{highPriorityCount} high-priority tasks</strong> and{' '}
+              <strong style={{ color: 'var(--accent-orange-light)' }}>{atRiskCount} deadline{atRiskCount !== 1 ? 's' : ''} at risk</strong> today.
+            </p>
+          )}
           <div className="briefing-stats">
             <div className="brief-stat">
-              <span className="brief-stat-value">6.5h</span>
-              <span className="brief-stat-label">Est. Productive Hours</span>
+              <span className="brief-stat-value">{isLoading ? '--' : activeTasks.length}</span>
+              <span className="brief-stat-label">Tasks Active</span>
             </div>
             <div className="brief-stat">
-              <span className="brief-stat-value">5</span>
-              <span className="brief-stat-label">Tasks Today</span>
+              <span className="brief-stat-value">
+                {isLoading ? '--' : habits.filter(h => h.week[todayIndex]).length}
+              </span>
+              <span className="brief-stat-label">Habits Checked Today</span>
             </div>
             <div className="brief-stat">
-              <span className="brief-stat-value">85</span>
+              <span className="brief-stat-value">{isLoading ? '--' : productivityScore}</span>
               <span className="brief-stat-label">Productivity Score</span>
             </div>
           </div>
@@ -43,7 +92,7 @@ export default function DashboardHome() {
       <div className="quick-actions">
         <Link to="/tasks" className="quick-action-btn">
           <span className="qa-icon">✏️</span>
-          <span>Add Task</span>
+          <span>Tasks Page</span>
         </Link>
         <Link to="/brain-dump" className="quick-action-btn">
           <span className="qa-icon">🧠</span>
@@ -65,52 +114,63 @@ export default function DashboardHome() {
 
       {/* Widget Grid */}
       <div className="dash-grid">
-        <TaskWidgetCompact />
-        <ScoreWidget />
-        <DeadlineWidgetCompact />
-        <GoalWidgetCompact />
-        <HabitWidgetCompact />
-        <AISuggestionsWidget />
+        <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} toggleTask={toggleTask} />
+        <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={2.5} streak={8} />
+        <DeadlineWidgetCompact tasks={tasks} />
+        <GoalWidgetCompact isLoading={goalsLoading} goals={goals} />
+        <HabitWidgetCompact isLoading={habitsLoading} habits={habits} toggleHabitDay={toggleHabitDay} todayIndex={todayIndex} />
+        <AISuggestionsWidget activeTasks={activeTasks} />
       </div>
     </div>
   );
 }
 
-function TaskWidgetCompact() {
-  const [tasks, setTasks] = useState([
-    { id: 1, text: 'Complete Physics Assignment', done: false, priority: 'high', due: '2:00 PM' },
-    { id: 2, text: 'Team Meeting Prep', done: false, priority: 'medium', due: '4:00 PM' },
-    { id: 3, text: 'Study for Math Test', done: false, priority: 'high', due: 'Tomorrow' },
-    { id: 4, text: 'Reply to Prof. Email', done: true, priority: 'low', due: 'Done' },
-    { id: 5, text: 'Gym Session', done: false, priority: 'medium', due: '7:00 PM' },
-  ]);
-  const toggleTask = (id: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+interface TaskWidgetProps {
+  isLoading: boolean;
+  tasks: any[];
+  toggleTask: (id: string, done: boolean) => void;
+}
+
+function TaskWidgetCompact({ isLoading, tasks, toggleTask }: TaskWidgetProps) {
+  const activeTasks = tasks.filter(t => !t.done).slice(0, 5);
 
   return (
     <div className="widget">
       <div className="widget-header">
-        <h4>📋 Today's Tasks</h4>
+        <h4>📋 Active Tasks</h4>
         <Link to="/tasks" className="widget-link">View All →</Link>
       </div>
       <div className="task-list-compact">
-        {tasks.map(task => (
-          <div key={task.id} className={`task-row ${task.done ? 'done' : ''}`} onClick={() => toggleTask(task.id)}>
-            <div className={`task-check-sm ${task.done ? 'checked' : ''}`}>{task.done && '✓'}</div>
-            <span className="task-text-sm">{task.text}</span>
-            <span className="task-due-sm">{task.due}</span>
-            <span className="task-dot" style={{
-              background: task.priority === 'high' ? 'var(--accent-red)' :
-                task.priority === 'medium' ? 'var(--accent-orange)' : 'var(--accent-green)'
-            }}></span>
-          </div>
-        ))}
+        {isLoading ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '10px 0' }}>Syncing...</p>
+        ) : activeTasks.length === 0 ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No active tasks! 🎉</p>
+        ) : (
+          activeTasks.map(task => (
+            <div key={task.id} className="task-row" onClick={() => toggleTask(task.id, task.done)}>
+              <div className="task-check-sm">{task.done && '✓'}</div>
+              <span className="task-text-sm">{task.text}</span>
+              <span className="task-due-sm">{task.due}</span>
+              <span className="task-dot" style={{
+                background: task.priority === 'critical' || task.priority === 'high' ? 'var(--accent-red)' :
+                  task.priority === 'medium' ? 'var(--accent-orange)' : 'var(--accent-green)'
+              }}></span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function ScoreWidget() {
-  const score = 85;
+interface ScoreWidgetProps {
+  score: number;
+  totalTasks: number;
+  focusHours: number;
+  streak: number;
+}
+
+function ScoreWidget({ score, totalTasks, focusHours, streak }: ScoreWidgetProps) {
   const circumference = 2 * Math.PI * 54;
   const offset = circumference - (score / 100) * circumference;
 
@@ -137,118 +197,149 @@ function ScoreWidget() {
         </svg>
       </div>
       <div className="score-mini-stats">
-        <div><strong>12</strong><span>Tasks</span></div>
-        <div><strong>4.5h</strong><span>Focus</span></div>
-        <div><strong>8</strong><span>Streak</span></div>
+        <div><strong>{totalTasks}</strong><span>Tasks</span></div>
+        <div><strong>{focusHours}h</strong><span>Focus</span></div>
+        <div><strong>{streak}</strong><span>Streak</span></div>
       </div>
     </div>
   );
 }
 
-function DeadlineWidgetCompact() {
-  const deadlines = [
-    { task: 'Physics Assignment', due: 'Today, 11:59 PM', urgency: 'critical' },
-    { task: 'Math Test', due: 'Tomorrow, 9:00 AM', urgency: 'high' },
-    { task: 'Project Presentation', due: 'Wed, 2:00 PM', urgency: 'medium' },
-  ];
+function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
+  const deadlines = tasks
+    .filter(t => !t.done && (t.priority === 'critical' || t.priority === 'high'))
+    .slice(0, 3);
 
   return (
     <div className="widget">
       <div className="widget-header">
-        <h4>⏰ Deadlines</h4>
+        <h4>⏰ Critical Deadlines</h4>
         <Link to="/tasks" className="widget-link">View All →</Link>
       </div>
       <div className="deadline-list-compact">
-        {deadlines.map((d, i) => (
-          <div key={i} className={`deadline-row urgency-${d.urgency}`}>
-            <div className="dl-indicator"></div>
-            <div className="dl-info">
-              <span className="dl-task">{d.task}</span>
-              <span className="dl-due">{d.due}</span>
+        {deadlines.length === 0 ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No urgent deadlines! 😎</p>
+        ) : (
+          deadlines.map((d, i) => (
+            <div key={i} className={`deadline-row urgency-${d.priority === 'critical' ? 'critical' : 'high'}`}>
+              <div className="dl-indicator"></div>
+              <div className="dl-info">
+                <span className="dl-task">{d.text}</span>
+                <span className="dl-due">{d.due}</span>
+              </div>
+              {d.priority === 'critical' && <span className="dl-badge">🚨</span>}
             </div>
-            {d.urgency === 'critical' && <span className="dl-badge">🚨</span>}
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function GoalWidgetCompact() {
-  const goals = [
-    { name: 'Learn React', progress: 75, color: 'var(--accent-blue)' },
-    { name: 'Fitness Goal', progress: 60, color: 'var(--accent-green)' },
-    { name: 'Read 12 Books', progress: 42, color: 'var(--accent-purple)' },
-  ];
+interface GoalWidgetProps {
+  isLoading: boolean;
+  goals: any[];
+}
+
+function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
+  const compactGoals = goals.slice(0, 3);
 
   return (
     <div className="widget">
       <div className="widget-header">
-        <h4>🎯 Goals</h4>
+        <h4>🎯 Goals Roadmap</h4>
         <Link to="/goals" className="widget-link">View All →</Link>
       </div>
       <div className="goal-list-compact">
-        {goals.map((g, i) => (
-          <div key={i} className="goal-row">
-            <div className="goal-row-top">
-              <span>{g.name}</span>
-              <span style={{ color: g.color, fontWeight: 700 }}>{g.progress}%</span>
+        {isLoading ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '10px 0' }}>Syncing...</p>
+        ) : compactGoals.length === 0 ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No goals set yet.</p>
+        ) : (
+          compactGoals.map((g, i) => (
+            <div key={i} className="goal-row">
+              <div className="goal-row-top">
+                <span>{g.name}</span>
+                <span style={{ color: g.color, fontWeight: 700 }}>{g.progress}%</span>
+              </div>
+              <div className="goal-bar-sm">
+                <div className="goal-fill-sm" style={{ width: `${g.progress}%`, background: g.color }}></div>
+              </div>
             </div>
-            <div className="goal-bar-sm">
-              <div className="goal-fill-sm" style={{ width: `${g.progress}%`, background: g.color }}></div>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function HabitWidgetCompact() {
-  const habits = [
-    { name: '💧 Water', streak: 5, done: true },
-    { name: '📚 Read', streak: 3, done: true },
-    { name: '🏃 Exercise', streak: 8, done: false },
-    { name: '🧘 Meditate', streak: 2, done: true },
-  ];
+interface HabitWidgetProps {
+  isLoading: boolean;
+  habits: any[];
+  toggleHabitDay: (id: string, index: number) => void;
+  todayIndex: number;
+}
+
+function HabitWidgetCompact({ isLoading, habits, toggleHabitDay, todayIndex }: HabitWidgetProps) {
+  const compactHabits = habits.slice(0, 4);
 
   return (
     <div className="widget">
       <div className="widget-header">
-        <h4>🔄 Habits</h4>
+        <h4>🔄 Daily Habits</h4>
         <Link to="/habits" className="widget-link">View All →</Link>
       </div>
       <div className="habit-compact-list">
-        {habits.map((h, i) => (
-          <div key={i} className="habit-compact-row">
-            <span className="habit-compact-name">{h.name}</span>
-            <span className="habit-compact-streak">🔥 {h.streak}</span>
-            <div className={`habit-compact-check ${h.done ? 'done' : ''}`}>{h.done ? '✓' : ''}</div>
-          </div>
-        ))}
+        {isLoading ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '10px 0' }}>Syncing...</p>
+        ) : compactHabits.length === 0 ? (
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No habits tracked.</p>
+        ) : (
+          compactHabits.map((h, i) => {
+            const isDoneToday = h.week[todayIndex];
+            return (
+              <div 
+                key={i} 
+                className="habit-compact-row" 
+                onClick={() => toggleHabitDay(h.id, todayIndex)}
+                style={{ cursor: 'pointer' }}
+                title="Click to check off for today"
+              >
+                <span className="habit-compact-name">{h.name}</span>
+                <span className="habit-compact-streak">🔥 {h.streak}</span>
+                <div className={`habit-compact-check ${isDoneToday ? 'done' : ''}`}>{isDoneToday ? '✓' : ''}</div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
 }
 
-function AISuggestionsWidget() {
+function AISuggestionsWidget({ activeTasks }: { activeTasks: any[] }) {
+  const urgentTask = activeTasks.find(t => t.priority === 'critical') || activeTasks[0];
+
   return (
     <div className="widget">
       <div className="widget-header">
         <h4>🤖 AI Recommendations</h4>
       </div>
       <div className="ai-recs">
-        <div className="ai-rec">
-          <span className="ai-rec-icon">💡</span>
-          <p>Complete Physics Assignment now — your focus levels are highest between 2-4 PM.</p>
-        </div>
+        {urgentTask ? (
+          <div className="ai-rec">
+            <span className="ai-rec-icon">💡</span>
+            <p>Start task <strong>"{urgentTask.text}"</strong> now — this is prioritized based on your deadlines.</p>
+          </div>
+        ) : (
+          <div className="ai-rec">
+            <span className="ai-rec-icon">💡</span>
+            <p>You have no active tasks left! Time to relax or set new goals for the week.</p>
+          </div>
+        )}
         <div className="ai-rec">
           <span className="ai-rec-icon">⚡</span>
-          <p>You're on an 8-day productivity streak! Keep it up to unlock "Consistency Master" 🏆</p>
-        </div>
-        <div className="ai-rec">
-          <span className="ai-rec-icon">🧠</span>
-          <p>Consider a 25-min focus sprint on Math Test prep before your meeting at 4 PM.</p>
+          <p>NovaLife productivity metrics and data streams are synchronized in real time with Cloud Firestore.</p>
         </div>
       </div>
     </div>

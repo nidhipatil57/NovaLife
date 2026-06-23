@@ -4,8 +4,8 @@ import './AIAssistantPage.css';
 const suggestions = ['Plan my week', 'Schedule my exams', 'Analyze my productivity', 'Help me study for physics', 'What should I do next?', 'Create a workout plan'];
 
 export default function AIAssistantPage() {
-  const [messages, setMessages] = useState([
-    { role: 'ai' as const, text: "Hi Nidhi! 👋 I'm your AI Life Assistant. I can help you plan, schedule, analyze productivity, and more. What would you like to do today?" },
+  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([
+    { role: 'ai', text: "Hi Nidhi! 👋 I'm your AI Life Assistant. I can help you plan, schedule, analyze productivity, and more. What would you like to do today?" },
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
