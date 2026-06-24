@@ -88,29 +88,6 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <Link to="/tasks" className="quick-action-btn">
-          <span className="qa-icon">✏️</span>
-          <span>Tasks Page</span>
-        </Link>
-        <Link to="/brain-dump" className="quick-action-btn">
-          <span className="qa-icon">🧠</span>
-          <span>Brain Dump</span>
-        </Link>
-        <Link to="/focus" className="quick-action-btn">
-          <span className="qa-icon">🎧</span>
-          <span>Focus Session</span>
-        </Link>
-        <Link to="/ai-assistant" className="quick-action-btn">
-          <span className="qa-icon">🤖</span>
-          <span>Ask AI</span>
-        </Link>
-        <Link to="/rescue" className="quick-action-btn qa-rescue">
-          <span className="qa-icon">🚨</span>
-          <span>Rescue Mode</span>
-        </Link>
-      </div>
 
       {/* Widget Grid */}
       <div className="dash-grid">
@@ -180,8 +157,8 @@ function ScoreWidget({ score, totalTasks, focusHours, streak }: ScoreWidgetProps
         <h4>📈 Productivity Score</h4>
         <Link to="/analytics" className="widget-link">Details →</Link>
       </div>
-      <div className="score-chart-home">
-        <svg viewBox="0 0 120 120" className="score-svg-home">
+      <div className="score-chart-home" style={{ position: 'relative', width: '130px', height: '130px', margin: '0 auto var(--space-4) auto' }}>
+        <svg viewBox="0 0 120 120" className="score-svg-home" style={{ width: '100%', height: '100%' }}>
           <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="8" />
           <circle cx="60" cy="60" r="54" fill="none" stroke="url(#scoreGradHome)" strokeWidth="8"
             strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} className="score-progress-anim" />
@@ -192,9 +169,21 @@ function ScoreWidget({ score, totalTasks, focusHours, streak }: ScoreWidgetProps
               <stop offset="100%" stopColor="var(--accent-cyan)" />
             </linearGradient>
           </defs>
-          <text x="60" y="55" textAnchor="middle" className="score-num-text">{score}</text>
-          <text x="60" y="72" textAnchor="middle" className="score-label-text">SCORE</text>
         </svg>
+        <div className="score-center-text" style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none'
+        }}>
+          <span style={{ fontSize: '28px', fontWeight: '800', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: '1' }}>{score}</span>
+          <span style={{ fontSize: '9px', fontWeight: '700', color: 'var(--text-tertiary)', letterSpacing: '2px', textTransform: 'uppercase', marginTop: '2px' }}>SCORE</span>
+        </div>
       </div>
       <div className="score-mini-stats">
         <div><strong>{totalTasks}</strong><span>Tasks</span></div>
@@ -282,35 +271,60 @@ interface HabitWidgetProps {
 
 function HabitWidgetCompact({ isLoading, habits, toggleHabitDay, todayIndex }: HabitWidgetProps) {
   const compactHabits = habits.slice(0, 4);
+  const daysShort = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   return (
-    <div className="widget">
+    <div className="widget" style={{ minWidth: '320px' }}>
       <div className="widget-header">
-        <h4>🔄 Daily Habits</h4>
+        <h4>🔄 Habit Tracker</h4>
         <Link to="/habits" className="widget-link">View All →</Link>
       </div>
-      <div className="habit-compact-list">
+      <div className="habit-mini-grid">
         {isLoading ? (
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '10px 0' }}>Syncing...</p>
         ) : compactHabits.length === 0 ? (
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No habits tracked.</p>
         ) : (
-          compactHabits.map((h, i) => {
-            const isDoneToday = h.week[todayIndex];
-            return (
-              <div 
-                key={i} 
-                className="habit-compact-row" 
-                onClick={() => toggleHabitDay(h.id, todayIndex)}
-                style={{ cursor: 'pointer' }}
-                title="Click to check off for today"
-              >
-                <span className="habit-compact-name">{h.name}</span>
-                <span className="habit-compact-streak">🔥 {h.streak}</span>
-                <div className={`habit-compact-check ${isDoneToday ? 'done' : ''}`}>{isDoneToday ? '✓' : ''}</div>
-              </div>
-            );
-          })
+          <>
+            <div className="mini-grid-header" style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(7, 1fr)', gap: '4px', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px', marginBottom: '8px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+              <span style={{ textAlign: 'left', fontWeight: 'bold' }}>Habit</span>
+              {daysShort.map((day, idx) => (
+                <span key={idx} className={`mini-grid-day-lbl ${idx === todayIndex ? 'today' : ''}`} style={idx === todayIndex ? { color: 'var(--accent-blue-light)', fontWeight: 'bold' } : undefined}>{day}</span>
+              ))}
+            </div>
+            <div className="mini-grid-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {compactHabits.map((h) => (
+                <div key={h.id} className="mini-grid-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(7, 1fr)', gap: '4px', alignItems: 'center' }}>
+                  <span className="mini-habit-title" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }} title={h.name}>{h.name}</span>
+                  {h.week.map((done: boolean, idx: number) => (
+                    <div 
+                      key={idx}
+                      className={`mini-grid-cell ${done ? 'completed' : ''} ${idx === todayIndex ? 'today' : ''}`}
+                      onClick={() => toggleHabitDay(h.id, idx)}
+                      style={{ 
+                        height: '24px', 
+                        borderRadius: 'var(--radius-sm)', 
+                        border: '1px solid rgba(255,255,255,0.06)', 
+                        background: done ? (h.color || 'var(--accent-cyan)') : 'rgba(0,0,0,0.15)',
+                        boxShadow: done ? `0 0 8px ${h.color || 'var(--accent-cyan)'}` : 'none',
+                        color: 'white',
+                        fontSize: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      title={`Toggle ${h.name} for ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][idx]}`}
+                    >
+                      {done ? '✓' : ''}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -321,25 +335,39 @@ function AISuggestionsWidget({ activeTasks }: { activeTasks: any[] }) {
   const urgentTask = activeTasks.find(t => t.priority === 'critical') || activeTasks[0];
 
   return (
-    <div className="widget">
+    <div className="widget widget-ai-suggestions">
       <div className="widget-header">
-        <h4>🤖 AI Recommendations</h4>
+        <h4>🤖 AI Suggestions</h4>
       </div>
-      <div className="ai-recs">
-        {urgentTask ? (
-          <div className="ai-rec">
-            <span className="ai-rec-icon">💡</span>
-            <p>Start task <strong>"{urgentTask.text}"</strong> now — this is prioritized based on your deadlines.</p>
+      <div className="ai-suggestions-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+            <span className="ai-suggestion-icon">⚡</span>
+            <span>Peak Energy Window</span>
           </div>
-        ) : (
-          <div className="ai-rec">
-            <span className="ai-rec-icon">💡</span>
-            <p>You have no active tasks left! Time to relax or set new goals for the week.</p>
+          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>Your highest energy levels occur between <strong>2 PM - 4 PM</strong>. Schedule critical assignments during this window.</p>
+        </div>
+
+        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+            <span className="ai-suggestion-icon">🎯</span>
+            <span>Next Priority Sprint</span>
           </div>
-        )}
-        <div className="ai-rec">
-          <span className="ai-rec-icon">⚡</span>
-          <p>NovaLife productivity metrics and data streams are synchronized in real time with Cloud Firestore.</p>
+          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: '1.4' }}>
+            {urgentTask 
+              ? `Your highest priority task is "${urgentTask.text}". Take action now to reduce backlog risk.`
+              : "You're all caught up on tasks! Set a new goal or start a wellness habit."
+            }
+          </p>
+          <Link to="/focus" className="ai-start-now-btn" style={{ fontSize: '11px', color: 'var(--accent-blue-light)', fontWeight: 'bold', textDecoration: 'none', display: 'inline-block' }}>Start Now →</Link>
+        </div>
+
+        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+            <span className="ai-suggestion-icon">🧘</span>
+            <span>Habit Stacking Tip</span>
+          </div>
+          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>Complete a quick 5-min stretch right after a Pomodoro break to build physical resilience.</p>
         </div>
       </div>
     </div>

@@ -152,8 +152,14 @@ export default function HabitsPage() {
                   </div>
                 ))}
                 <div className="habit-streak-cell">
-                  <span className="streak-fire">🔥</span>
-                  <span>{h.streak}d</span>
+                  <div className="streak-item" title="Current Streak">
+                    <span className="streak-fire">🔥</span>
+                    <span>{h.streak}d</span>
+                  </div>
+                  <div className="streak-best" title="Best Streak">
+                    <span className="streak-trophy">🏆</span>
+                    <span>{h.best}d</span>
+                  </div>
                 </div>
                 <div className="habit-rate-cell">
                   <div className="rate-bar-bg">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTasks, type Task } from '../hooks/useTasks';
 import './TasksPage.css';
 
@@ -11,10 +11,93 @@ const priorityConfig = {
 
 const categories = ['Academic', 'Work', 'Health', 'Personal', 'Career', 'Finance', 'General'];
 
+const categoryColors: Record<string, string> = {
+  Academic: 'var(--accent-purple)',
+  Work: 'var(--accent-blue)',
+  Health: 'var(--accent-green)',
+  Personal: 'var(--accent-orange)',
+  Career: 'var(--accent-cyan-light)',
+  Finance: 'var(--accent-orange)',
+  General: 'var(--text-secondary)',
+};
+
+const formatTimeAgo = (isoString: string) => {
+  if (!isoString) return 'some time ago';
+  const d = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay === 1) return 'yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+interface Option {
+  value: string;
+  label: string;
+}
+
+function CustomSelect({ 
+  value, 
+  onChange, 
+  options 
+}: { 
+  value: string; 
+  onChange: (val: string) => void; 
+  options: Option[]; 
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find(o => o.value === value) || options[0];
+
+  return (
+    <div className="custom-dropdown-container" ref={containerRef}>
+      <div className="custom-dropdown-trigger" onClick={() => setIsOpen(!isOpen)}>
+        <span>{selectedOption.label}</span>
+        <span className="dropdown-arrow" style={{ transform: isOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+      </div>
+      {isOpen && (
+        <div className="custom-dropdown-menu">
+          {options.map(opt => (
+            <div 
+              key={opt.value} 
+              className={`custom-dropdown-item ${opt.value === value ? 'selected' : ''}`}
+              onClick={() => {
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TasksPage() {
-  const { tasks, loading, user, addTask, toggleTask, deleteTask } = useTasks();
+  const { tasks, loading, user, addTask, toggleTask, deleteTask, updateTask } = useTasks();
+  
   const [view, setView] = useState<'list' | 'kanban'>('list');
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'ai'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   // Add Task Modal State
@@ -22,14 +105,428 @@ export default function TasksPage() {
   const [newText, setNewText] = useState('');
   const [newPriority, setNewPriority] = useState<Task['priority']>('medium');
   const [newCategory, setNewCategory] = useState('General');
-  const [newDue, setNewDue] = useState('Today');
+  const [newDue, setNewDue] = useState('');
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
 
-  const handleToggleTask = async (id: string, currentDone: boolean) => {
+  // Toast Notification State
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'info' | 'warning'>('success');
+  const showToast = (msg: string, type: 'success' | 'info' | 'warning' = 'success') => {
+    setToastMessage(msg);
+    setToastType(type);
+    setTimeout(() => {
+      setToastMessage(prev => prev === msg ? null : prev);
+    }, 4000);
+  };
+
+  // Delete Confirmation Modal State
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
+  // Active sync selected task
+  const activeTask = selectedTask ? (tasks.find(t => t.id === selectedTask.id) || selectedTask) : null;
+
+  // Detail Panel Tabs
+  const [activeTab, setActiveTab] = useState<'subtasks' | 'timer' | 'notes' | 'activity'>('subtasks');
+
+  // Detail Panel Snooze Dropdown
+  const [showSnoozeDropdown, setShowSnoozeDropdown] = useState(false);
+  const [customSnoozeDate, setCustomSnoozeDate] = useState('');
+
+  // Detail Panel Inline Editor
+  const [isEditingHeader, setIsEditingHeader] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editDue, setEditDue] = useState('');
+  const [editPriority, setEditPriority] = useState<Task['priority']>('medium');
+
+  // Subtasks Sub-State
+  const [newSubtaskText, setNewSubtaskText] = useState('');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // Timer Sub-State
+  const [timerMinutes, setTimerMinutes] = useState(0);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerIsRunning, setTimerIsRunning] = useState(false);
+  const [timerIntervalId, setTimerIntervalId] = useState<number | null>(null);
+  const [studySessionName, setStudySessionName] = useState('');
+  const [showSaveSessionBox, setShowSaveSessionBox] = useState(false);
+
+  // Notes Sub-State
+  const [notesText, setNotesText] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [lastSavedNotes, setLastSavedNotes] = useState('');
+  const [notesList, setNotesList] = useState<{ id: string; name: string; content: string; updatedAt: string }[]>([]);
+  const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
+  const [showSaveNoteBox, setShowSaveNoteBox] = useState(false);
+  const [newNoteName, setNewNoteName] = useState('');
+  const [notesViewMode, setNotesViewMode] = useState<'editor' | 'list'>('editor');
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  // Rename Note Modal States
+  const [showRenameNoteModal, setShowRenameNoteModal] = useState(false);
+  const [renameNoteId, setRenameNoteId] = useState<string | null>(null);
+  const [renameNoteName, setRenameNoteName] = useState('');
+
+  // Delete Note Modal States
+  const [showDeleteNoteModal, setShowDeleteNoteModal] = useState(false);
+  const [deleteNoteId, setDeleteNoteId] = useState<string | null>(null);
+  const [deleteNoteName, setDeleteNoteName] = useState('');
+
+  // Audio chirp synthesized locally
+  const playBeep = () => {
     try {
-      await toggleTask(id, !currentDone);
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.frequency.setValueAtTime(880, ctx.currentTime);
+      gain1.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.2);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.15);
+      gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.15);
+      gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start();
+      osc2.stop(ctx.currentTime + 0.35);
+    } catch (e) {
+      console.warn('AudioContext failed:', e);
+    }
+  };
+
+  // Timer Cleanups
+  useEffect(() => {
+    return () => {
+      if (timerIntervalId) clearInterval(timerIntervalId);
+    };
+  }, [timerIntervalId]);
+
+  useEffect(() => {
+    // Reset timer when details panel closes or changes task
+    setTimerMinutes(0);
+    setTimerSeconds(0);
+    setTimerIsRunning(false);
+    setShowSaveSessionBox(false);
+    setStudySessionName('');
+    if (timerIntervalId) {
+      clearInterval(timerIntervalId);
+      setTimerIntervalId(null);
+    }
+  }, [activeTask?.id]);
+
+  // Notes Initializer & Debounce
+  useEffect(() => {
+    if (activeTask) {
+      let parsed: { id: string; name: string; content: string; updatedAt: string }[] = [];
+      try {
+        if (activeTask.notes) {
+          const json = JSON.parse(activeTask.notes);
+          if (Array.isArray(json)) {
+            parsed = json;
+          } else {
+            parsed = [{ id: 'default', name: 'Default Note', content: activeTask.notes, updatedAt: new Date().toISOString() }];
+          }
+        }
+      } catch (e) {
+        parsed = [{ id: 'default', name: 'Default Note', content: activeTask.notes || '', updatedAt: new Date().toISOString() }];
+      }
+      setNotesList(parsed);
+      setShowSaveNoteBox(false);
+      setNotesViewMode('editor');
+
+      if (parsed.length > 0) {
+        const defaultNote = parsed[0];
+        setCurrentNoteId(defaultNote.id);
+        setNotesText(defaultNote.content);
+        setLastSavedNotes(defaultNote.content);
+        if (editorRef.current) {
+          editorRef.current.innerHTML = defaultNote.content;
+        }
+      } else {
+        setCurrentNoteId(null);
+        setNotesText('');
+        setLastSavedNotes('');
+        if (editorRef.current) {
+          editorRef.current.innerHTML = '';
+        }
+      }
+    }
+  }, [activeTask?.id]);
+
+  useEffect(() => {
+    if (!activeTask || !currentNoteId || currentNoteId === 'new') return;
+    if (notesText === lastSavedNotes) return;
+
+    const delayDebounceId = setTimeout(async () => {
+      await saveNotes(notesText);
+    }, 1500);
+
+    return () => clearTimeout(delayDebounceId);
+  }, [notesText, currentNoteId]);
+
+  useEffect(() => {
+    if (notesViewMode === 'editor' && editorRef.current) {
+      editorRef.current.innerHTML = notesText;
+    }
+  }, [notesViewMode, currentNoteId]);
+
+  const saveNotes = async (text: string, manual: boolean = false) => {
+    if (!activeTask || !currentNoteId || currentNoteId === 'new') return;
+
+    const currentNoteIndex = notesList.findIndex(n => n.id === currentNoteId);
+    if (currentNoteIndex === -1) return;
+    if (notesList[currentNoteIndex].content === text && !manual) return;
+
+    setSavingNotes(true);
+    try {
+      const updatedList = [...notesList];
+      updatedList[currentNoteIndex] = {
+        ...updatedList[currentNoteIndex],
+        content: text,
+        updatedAt: new Date().toISOString()
+      };
+
+      const recentLogs = activeTask.activityLog || [];
+      let newActivity = [...recentLogs];
+      
+      const now = new Date();
+      let shouldLog = true;
+      const lastNoteLog = recentLogs.slice().reverse().find(l => l.action.includes('updated'));
+      if (lastNoteLog) {
+        const diff = now.getTime() - new Date(lastNoteLog.timestamp).getTime();
+        if (diff < 10000) {
+          shouldLog = false;
+        }
+      }
+
+      if (shouldLog) {
+        newActivity.push({ 
+          action: `Note "${updatedList[currentNoteIndex].name}" updated`, 
+          timestamp: now.toISOString() 
+        });
+      }
+
+      await updateTask(activeTask.id, {
+        notes: JSON.stringify(updatedList),
+        activityLog: newActivity
+      });
+      setNotesList(updatedList);
+      setLastSavedNotes(text);
+      if (manual) {
+        showToast('Notes saved successfully', 'success');
+      }
     } catch (err) {
-      alert('Failed to update task.');
+      console.error('Failed to save notes:', err);
+      showToast('Failed to save notes', 'warning');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleSaveNoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTask || !newNoteName.trim()) return;
+
+    const editorContent = editorRef.current ? editorRef.current.innerHTML : notesText;
+    const now = new Date().toISOString();
+
+    let updatedList = [...notesList];
+
+    if (currentNoteId && currentNoteId !== 'new') {
+      // update existing name/content
+      updatedList = updatedList.map(n => 
+        n.id === currentNoteId ? { ...n, name: newNoteName.trim(), content: editorContent, updatedAt: now } : n
+      );
+    } else {
+      // create new note
+      const newId = 'note_' + Date.now();
+      updatedList.push({
+        id: newId,
+        name: newNoteName.trim(),
+        content: editorContent,
+        updatedAt: now
+      });
+    }
+
+    try {
+      setSavingNotes(true);
+      await updateTask(activeTask.id, {
+        notes: JSON.stringify(updatedList),
+        activityLog: [
+          ...(activeTask.activityLog || []),
+          { action: `Note "${newNoteName.trim()}" saved`, timestamp: now }
+        ]
+      });
+      setNotesList(updatedList);
+      
+      // Reset editor to new note
+      setCurrentNoteId('new');
+      setNotesText('');
+      setLastSavedNotes('');
+      if (editorRef.current) {
+        editorRef.current.innerHTML = '';
+      }
+
+      setNotesViewMode('list');
+      setShowSaveNoteBox(false);
+      showToast(`Saved Note: "${newNoteName.trim()}"`, 'success');
+    } catch (err) {
+      showToast('Failed to save note', 'warning');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleDirectSave = async (editorContent: string) => {
+    if (!activeTask || !currentNoteId || currentNoteId === 'new') return;
+    
+    const currentNoteIndex = notesList.findIndex(n => n.id === currentNoteId);
+    if (currentNoteIndex === -1) return;
+
+    setSavingNotes(true);
+    try {
+      const updatedList = [...notesList];
+      const noteName = updatedList[currentNoteIndex].name;
+      updatedList[currentNoteIndex] = {
+        ...updatedList[currentNoteIndex],
+        content: editorContent,
+        updatedAt: new Date().toISOString()
+      };
+
+      await updateTask(activeTask.id, {
+        notes: JSON.stringify(updatedList),
+        activityLog: [
+          ...(activeTask.activityLog || []),
+          { action: `Note "${noteName}" changes saved`, timestamp: new Date().toISOString() }
+        ]
+      });
+      setNotesList(updatedList);
+      
+      // Reset editor to new note
+      setCurrentNoteId('new');
+      setNotesText('');
+      setLastSavedNotes('');
+      if (editorRef.current) {
+        editorRef.current.innerHTML = '';
+      }
+
+      setNotesViewMode('list');
+      showToast(`Saved Note: "${noteName}"`, 'success');
+    } catch (err) {
+      showToast('Failed to save note changes', 'warning');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleRenameNoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTask || !renameNoteId || !renameNoteName.trim()) return;
+
+    const updatedList = notesList.map(n => 
+      n.id === renameNoteId ? { ...n, name: renameNoteName.trim(), updatedAt: new Date().toISOString() } : n
+    );
+    try {
+      setSavingNotes(true);
+      await updateTask(activeTask.id, {
+        notes: JSON.stringify(updatedList)
+      });
+      setNotesList(updatedList);
+      setShowRenameNoteModal(false);
+      showToast(`Renamed note to "${renameNoteName.trim()}"`, 'success');
+    } catch (err) {
+      showToast('Failed to rename note', 'warning');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleDeleteNoteConfirm = async () => {
+    if (!activeTask || !deleteNoteId) return;
+
+    const updatedList = notesList.filter(n => n.id !== deleteNoteId);
+    try {
+      setSavingNotes(true);
+      await updateTask(activeTask.id, {
+        notes: JSON.stringify(updatedList)
+      });
+      setNotesList(updatedList);
+      if (currentNoteId === deleteNoteId) {
+        setCurrentNoteId('new');
+        setNotesText('');
+        setLastSavedNotes('');
+        if (editorRef.current) {
+          editorRef.current.innerHTML = '';
+        }
+      }
+      setShowDeleteNoteModal(false);
+      showToast('Note deleted successfully', 'success');
+    } catch (err) {
+      showToast('Failed to delete note', 'warning');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const handleEditorInput = () => {
+    if (editorRef.current) {
+      setNotesText(editorRef.current.innerHTML);
+    }
+  };
+
+
+  // Normalizing Subtasks
+  const subtasksList = activeTask?.subtasks || [];
+  const normalizedSubtasks: { text: string; done: boolean }[] = subtasksList.map(st => 
+    typeof st === 'string' ? { text: st, done: false } : st
+  );
+
+  const totalSubtasks = normalizedSubtasks.length;
+  const completedSubtasks = normalizedSubtasks.filter(st => st.done).length;
+  const percentComplete = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+  const [completingTaskIds, setCompletingTaskIds] = useState<string[]>([]);
+
+  const handleToggleTask = async (id: string, currentDone: boolean) => {
+    if (!currentDone) {
+      // Marking complete: trigger animation
+      setCompletingTaskIds(prev => [...prev, id]);
+      showToast('Task completed successfully', 'success');
+
+      setTimeout(async () => {
+        try {
+          await toggleTask(id, true);
+        } catch (err) {
+          showToast('Failed to update task.', 'warning');
+        } finally {
+          setCompletingTaskIds(prev => prev.filter(taskId => taskId !== id));
+        }
+      }, 550); // Match animation duration
+    } else {
+      // Marking incomplete
+      try {
+        await toggleTask(id, false);
+        showToast('Task marked active', 'success');
+      } catch (err) {
+        showToast('Failed to update task.', 'warning');
+      }
+    }
+  };
+
+  const formatDueForSave = (dateTimeStr: string) => {
+    if (!dateTimeStr) return 'Today';
+    try {
+      const d = new Date(dateTimeStr);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return dateTimeStr;
     }
   };
 
@@ -41,38 +538,294 @@ export default function TasksPage() {
       const subtasks = newSubtaskInput
         .split(',')
         .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+        .filter((s) => s.length > 0)
+        .map(s => ({ text: s, done: false }));
 
-      // Estimate a random risk score for demo/AI purposes if it is critical/high
-      const risk = newPriority === 'critical' ? 85 : newPriority === 'high' ? 60 : undefined;
+      const risk = newPriority === 'critical' ? 85 : newPriority === 'high' ? 60 : 20;
 
       await addTask({
         text: newText,
         done: false,
         priority: newPriority,
         category: newCategory,
-        due: newDue,
-        subtasks: subtasks.length > 0 ? subtasks : undefined,
+        due: formatDueForSave(newDue),
+        subtasks: subtasks.length > 0 ? (subtasks as any) : undefined,
         risk,
         aiGenerated: false,
+        notes: '',
+        sessionsCount: 0,
+        activityLog: [{ action: 'Task created', timestamp: new Date().toISOString() }]
       });
 
-      // Reset Form
       setNewText('');
       setNewPriority('medium');
       setNewCategory('General');
-      setNewDue('Today');
+      setNewDue('');
       setNewSubtaskInput('');
       setShowAddModal(false);
+      showToast('Task created successfully', 'success');
     } catch (err) {
-      alert('Failed to create task.');
+      showToast('Failed to create task.', 'warning');
     }
   };
 
+  // Subtasks Editing
+  const handleToggleSubtask = async (index: number) => {
+    if (!activeTask) return;
+    const newSubtasks = [...normalizedSubtasks];
+    newSubtasks[index].done = !newSubtasks[index].done;
+
+    const newActivity = [
+      ...(activeTask.activityLog || []),
+      { 
+        action: `Subtask '${newSubtasks[index].text}' marked as ${newSubtasks[index].done ? 'completed' : 'incomplete'}`, 
+        timestamp: new Date().toISOString() 
+      }
+    ];
+
+    await updateTask(activeTask.id, {
+      subtasks: newSubtasks as any,
+      activityLog: newActivity
+    });
+  };
+
+  const handleAddSubtaskInline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTask || !newSubtaskText.trim()) return;
+
+    const newSubtasks = [...normalizedSubtasks, { text: newSubtaskText.trim(), done: false }];
+    const newActivity = [
+      ...(activeTask.activityLog || []),
+      { action: `Subtask '${newSubtaskText.trim()}' added`, timestamp: new Date().toISOString() }
+    ];
+
+    await updateTask(activeTask.id, {
+      subtasks: newSubtasks as any,
+      activityLog: newActivity
+    });
+
+    setNewSubtaskText('');
+  };
+
+  const handleDeleteSubtask = async (index: number) => {
+    if (!activeTask) return;
+    const subtaskToDelete = normalizedSubtasks[index];
+    const newSubtasks = normalizedSubtasks.filter((_, i) => i !== index);
+
+    const newActivity = [
+      ...(activeTask.activityLog || []),
+      { action: `Subtask '${subtaskToDelete.text}' deleted`, timestamp: new Date().toISOString() }
+    ];
+
+    await updateTask(activeTask.id, {
+      subtasks: newSubtasks as any,
+      activityLog: newActivity
+    });
+  };
+
+  const handleReorderArrows = async (index: number, direction: 'up' | 'down') => {
+    if (!activeTask) return;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= normalizedSubtasks.length) return;
+
+    const newSubtasks = [...normalizedSubtasks];
+    const [moved] = newSubtasks.splice(index, 1);
+    newSubtasks.splice(targetIndex, 0, moved);
+
+    await updateTask(activeTask.id, {
+      subtasks: newSubtasks as any
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (_e: React.DragEvent, targetIndex: number) => {
+    if (draggedIndex === null || draggedIndex === targetIndex || !activeTask) return;
+    
+    const newSubtasks = [...normalizedSubtasks];
+    const [draggedItem] = newSubtasks.splice(draggedIndex, 1);
+    newSubtasks.splice(targetIndex, 0, draggedItem);
+    
+    setDraggedIndex(null);
+
+    await updateTask(activeTask.id, {
+      subtasks: newSubtasks as any
+    });
+  };
+
+  // Timer Countdown Handlers (Stopwatch / Count up style)
+  const startTimerInterval = () => {
+    setTimerIsRunning(true);
+    const interval = window.setInterval(() => {
+      setTimerSeconds(prevSec => {
+        if (prevSec === 59) {
+          setTimerMinutes(prevMin => prevMin + 1);
+          return 0;
+        }
+        return prevSec + 1;
+      });
+    }, 1000);
+    setTimerIntervalId(interval);
+  };
+
+  const handleStartTimer = () => {
+    if (timerIsRunning) {
+      setTimerIsRunning(false);
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        setTimerIntervalId(null);
+      }
+    } else {
+      startTimerInterval();
+    }
+  };
+
+  const handleResetTimer = () => {
+    setTimerIsRunning(false);
+    if (timerIntervalId) {
+      clearInterval(timerIntervalId);
+      setTimerIntervalId(null);
+    }
+    setTimerMinutes(0);
+    setTimerSeconds(0);
+    setShowSaveSessionBox(false);
+    setStudySessionName('');
+  };
+
+  const handleFinishSessionClick = () => {
+    // Pause the timer first
+    setTimerIsRunning(false);
+    if (timerIntervalId) {
+      clearInterval(timerIntervalId);
+      setTimerIntervalId(null);
+    }
+    setShowSaveSessionBox(true);
+  };
+
+  const formatTimeStudied = (mins: number, secs: number) => {
+    const hrs = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    if (hrs > 0) {
+      return `${hrs}h ${remainingMins}m ${secs}s`;
+    }
+    return `${mins}m ${secs}s`;
+  };
+
+  const handleSaveStudySession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTask || !studySessionName.trim()) return;
+
+    playBeep();
+    const durationText = formatTimeStudied(timerMinutes, timerSeconds);
+    const newSessionsCount = (activeTask.sessionsCount || 0) + 1;
+    const newActivity = [
+      ...(activeTask.activityLog || []),
+      { 
+        action: `Study Session completed: "${studySessionName.trim()}" (Duration: ${durationText})`, 
+        timestamp: new Date().toISOString() 
+      }
+    ];
+
+    try {
+      await updateTask(activeTask.id, {
+        sessionsCount: newSessionsCount,
+        activityLog: newActivity
+      });
+      showToast(`Saved Study Session: "${studySessionName.trim()}"`, 'success');
+      
+      // Reset timer state after successful save
+      setTimerMinutes(0);
+      setTimerSeconds(0);
+      setStudySessionName('');
+      setShowSaveSessionBox(false);
+    } catch (err) {
+      showToast('Failed to save study session', 'warning');
+    }
+  };
+
+  // Snooze handlers
+  const handleSnooze = async (newDueDate: string) => {
+    if (!activeTask) return;
+    const newActivity = [
+      ...(activeTask.activityLog || []),
+      { action: `Deadline rescheduled to: ${newDueDate}`, timestamp: new Date().toISOString() }
+    ];
+    try {
+      await updateTask(activeTask.id, {
+        due: newDueDate,
+        activityLog: newActivity
+      });
+      setShowSnoozeDropdown(false);
+      showToast(`Task rescheduled to ${newDueDate}`, 'success');
+    } catch (err) {
+      showToast('Failed to reschedule task', 'warning');
+    }
+  };
+
+  const handleCustomSnoozeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customSnoozeDate) return;
+    const d = new Date(customSnoozeDate);
+    const formatted = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    handleSnooze(formatted);
+    setCustomSnoozeDate('');
+  };
+
+  // Header Inline Editor
+  const startEditingHeader = () => {
+    if (!activeTask) return;
+    setEditTitle(activeTask.text);
+    setEditCategory(activeTask.category);
+    setEditDue(activeTask.due);
+    setEditPriority(activeTask.priority);
+    setIsEditingHeader(true);
+  };
+
+  const saveHeaderEdits = async () => {
+    if (!activeTask || !editTitle.trim()) return;
+
+    const changes: string[] = [];
+    if (editTitle !== activeTask.text) changes.push('title updated');
+    if (editCategory !== activeTask.category) changes.push(`category set to ${editCategory}`);
+    if (editPriority !== activeTask.priority) changes.push(`priority set to ${editPriority}`);
+    if (editDue !== activeTask.due) changes.push(`deadline updated to ${editDue}`);
+
+    let newActivity = [...(activeTask.activityLog || [])];
+    if (changes.length > 0) {
+      newActivity.push({
+        action: `Task updated: ${changes.join(', ')}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    await updateTask(activeTask.id, {
+      text: editTitle,
+      category: editCategory,
+      priority: editPriority,
+      due: editDue,
+      activityLog: newActivity
+    });
+
+    setIsEditingHeader(false);
+  };
+
   const filteredTasks = tasks.filter(t => {
-    if (filter === 'active') return !t.done;
-    if (filter === 'completed') return t.done;
-    if (filter === 'ai') return t.aiGenerated;
+    if (filter === 'active') {
+      return !t.done || completingTaskIds.includes(t.id);
+    }
+    if (filter === 'completed') {
+      return t.done;
+    }
+    if (filter === 'all') {
+      return !t.done || completingTaskIds.includes(t.id);
+    }
     return true;
   });
 
@@ -99,11 +852,11 @@ export default function TasksPage() {
       <div className="page-header">
         <div>
           <h2>✅ <span className="gradient-text">Tasks</span></h2>
-          <p>AI-powered task management — organized, prioritized, and always on track.</p>
+          <p>Task management — organized, prioritized, and always on track.</p>
         </div>
         <div className="page-header-actions">
           <div className="view-toggle">
-            <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>☰ List</button>
+            <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>🎴 Cards</button>
             <button className={view === 'kanban' ? 'active' : ''} onClick={() => setView('kanban')}>▦ Board</button>
           </div>
           <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>+ New Task</button>
@@ -112,12 +865,13 @@ export default function TasksPage() {
 
       {/* Filters */}
       <div className="task-filters">
-        {(['all', 'active', 'completed', 'ai'] as const).map(f => (
+        {(['all', 'active', 'completed'] as const).map(f => (
           <button key={f} className={`filter-btn ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
-            {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : f === 'completed' ? '✅ Completed' : '🤖 AI Generated'}
+            {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : '✅ Completed'}
             <span className="filter-count">
-              {f === 'all' ? tasks.length : f === 'active' ? tasks.filter(t => !t.done).length :
-                f === 'completed' ? tasks.filter(t => t.done).length : tasks.filter(t => t.aiGenerated).length}
+              {f === 'all' ? tasks.filter(t => !t.done).length :
+               f === 'active' ? tasks.filter(t => !t.done).length :
+               tasks.filter(t => t.done).length}
             </span>
           </button>
         ))}
@@ -126,7 +880,7 @@ export default function TasksPage() {
       {loading ? (
         <div className="loading-state" style={{ textAlign: 'center', padding: '60px' }}>
           <div className="ai-onboard-avatar" style={{ margin: '0 auto 20px auto', width: '40px', height: '40px' }}></div>
-          <p>Synchronizing with Firestore Database...</p>
+          <p>Synchronizing with Cloud Database...</p>
         </div>
       ) : tasks.length === 0 ? (
         <div className="empty-state widget glass-card-static" style={{ textAlign: 'center', padding: '50px 30px', margin: '20px 0' }}>
@@ -149,117 +903,692 @@ export default function TasksPage() {
                 <span className="kanban-count">{kanbanGroups[priority].length}</span>
               </div>
               <div className="kanban-cards">
-                {kanbanGroups[priority].map(task => (
-                  <div key={task.id} className="kanban-card widget" onClick={() => setSelectedTask(task)}>
-                    <div className="kanban-card-top">
-                      <span className="kanban-category">{task.category}</span>
-                      {task.risk && task.risk > 70 && <span className="kanban-risk">🚨 {task.risk}%</span>}
+                {kanbanGroups[priority].map(task => {
+                  const cardSubs: any[] = task.subtasks ? (Array.isArray(task.subtasks) ? task.subtasks : JSON.parse(task.subtasks as any)) : [];
+                  const subCount = cardSubs.length;
+                  const doneCount = cardSubs.filter((st: any) => typeof st === 'object' && st.done).length;
+                  return (
+                    <div 
+                      key={task.id} 
+                      className={`kanban-card widget ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
+                      onClick={() => setSelectedTask(task)}
+                    >
+                      <div className="kanban-card-top">
+                        <span className="kanban-category" style={{ color: categoryColors[task.category] || 'var(--text-secondary)' }}>{task.category}</span>
+                        {task.risk && task.risk > 70 && <span className="kanban-risk">🚨 {task.risk}%</span>}
+                      </div>
+                      <p className="kanban-task-text">{task.text}</p>
+                      <div className="card-indicators-row" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                        {subCount > 0 && <span>📋 {doneCount}/{subCount}</span>}
+                        {task.sessionsCount && task.sessionsCount > 0 ? <span>🍅 {task.sessionsCount}</span> : null}
+                      </div>
+                      <span className="kanban-due">{task.due}</span>
+                      {task.aiGenerated && <span className="ai-badge-sm">🤖 AI</span>}
                     </div>
-                    <p className="kanban-task-text">{task.text}</p>
-                    <span className="kanban-due">{task.due}</span>
-                    {task.aiGenerated && <span className="ai-badge-sm">🤖 AI</span>}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
         </div>
       ) : (
-        /* List View */
-        <div className="task-list-full">
-          {filteredTasks.map(task => (
-            <div key={task.id} className={`task-list-item widget ${task.done ? 'task-done' : ''}`} onClick={() => setSelectedTask(task)}>
-              <div className="task-check-lg" onClick={(e) => { e.stopPropagation(); handleToggleTask(task.id, task.done); }}>
-                <div className={`check-circle ${task.done ? 'checked' : ''}`}>{task.done && '✓'}</div>
-              </div>
-              <div className="task-main-info">
-                <div className="task-title-row">
-                  <span className="task-title">{task.text}</span>
-                  {task.aiGenerated && <span className="ai-badge-sm">🤖 AI</span>}
+        /* Grid Layout View */
+        <div className="task-grid-container">
+          {filteredTasks.map(task => {
+            const cardSubs: any[] = task.subtasks ? (Array.isArray(task.subtasks) ? task.subtasks : JSON.parse(task.subtasks as any)) : [];
+            const subCount = cardSubs.length;
+            const doneCount = cardSubs.filter((st: any) => typeof st === 'object' && st.done).length;
+            const compPercent = subCount > 0 ? Math.round((doneCount / subCount) * 100) : 0;
+            return (
+              <div 
+                key={task.id} 
+                className={`task-card-item widget ${task.done ? 'task-done' : ''} ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
+                onClick={() => setSelectedTask(task)}
+              >
+                <div className="card-top-row">
+                  <span className="card-category-badge" style={{ borderColor: categoryColors[task.category] || 'var(--text-secondary)', color: categoryColors[task.category] || 'var(--text-secondary)' }}>
+                    {task.category}
+                  </span>
+                  <span className="priority-badge" style={{ color: priorityConfig[task.priority].color, background: priorityConfig[task.priority].bg }}>
+                    {priorityConfig[task.priority].label}
+                  </span>
                 </div>
-                <div className="task-meta">
-                  <span className="task-category-tag">{task.category}</span>
-                  <span className="task-due-tag">{task.due}</span>
-                  {task.subtasks && task.subtasks.length > 0 && <span className="task-subtask-count">{task.subtasks.length} subtasks</span>}
+                
+                <h4 className="card-task-title">{task.text}</h4>
+
+                <div className="card-meta-metrics">
+                  <div className="meta-metric due-date-metric">
+                    📅 {task.due}
+                  </div>
+                  {subCount > 0 && (
+                    <div className="meta-metric subtasks-metric" title="Subtask progress">
+                      📋 {doneCount}/{subCount}
+                    </div>
+                  )}
+                  {task.sessionsCount && task.sessionsCount > 0 ? (
+                    <div className="meta-metric focus-sessions-metric" title="Focus sessions done">
+                      🍅 {task.sessionsCount}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              <div className="task-right">
-                <span className="priority-badge" style={{ color: priorityConfig[task.priority].color, background: priorityConfig[task.priority].bg }}>
-                  {priorityConfig[task.priority].label}
-                </span>
-                {task.risk && task.risk > 50 && (
-                  <div className="risk-indicator">
-                    <div className="risk-bar" style={{ width: `${task.risk}%`, background: task.risk > 70 ? 'var(--accent-red)' : 'var(--accent-orange)' }}></div>
+
+                {subCount > 0 && (
+                  <div className="card-progress-bar-container">
+                    <div className="card-progress-track">
+                      <div className="card-progress-fill" style={{ width: `${compPercent}%` }}></div>
+                    </div>
                   </div>
                 )}
+
+                <div className="card-footer-row">
+                  <div className="task-check-circle-wrapper" onClick={(e) => { e.stopPropagation(); handleToggleTask(task.id, task.done); }}>
+                    <div className={`check-circle ${task.done || completingTaskIds.includes(task.id) ? 'checked' : ''}`}>
+                      {(task.done || completingTaskIds.includes(task.id)) && '✓'}
+                    </div>
+                    <span className="toggle-label-text">
+                      {task.done || completingTaskIds.includes(task.id) ? 'Completed' : 'Mark Done'}
+                    </span>
+                  </div>
+
+                  {task.risk !== undefined && task.risk !== null && (
+                    <div className="card-risk-level" title={`Completion risk: ${task.risk}%`}>
+                      <span className="risk-dot" style={{ background: task.risk > 70 ? 'var(--accent-red)' : task.risk > 40 ? 'var(--accent-orange)' : 'var(--accent-green)' }}></span>
+                      <span className="risk-text-sm">Risk {task.risk}%</span>
+                    </div>
+                  )}
+                </div>
+
+                {task.aiGenerated && <div className="card-ai-badge">🤖 AI</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Task Detail Panel */}
-      {selectedTask && (
+      {/* Task Detail Panel Overlay */}
+      {activeTask && (
         <div className="task-detail-overlay" onClick={() => setSelectedTask(null)}>
           <div className="task-detail-panel widget" onClick={e => e.stopPropagation()}>
             <button className="detail-close" onClick={() => setSelectedTask(null)}>✕</button>
-            <div className="detail-header">
-              <span className="priority-badge" style={{ color: priorityConfig[selectedTask.priority].color, background: priorityConfig[selectedTask.priority].bg }}>
-                {priorityConfig[selectedTask.priority].label}
-              </span>
-              <h3>{selectedTask.text}</h3>
-              <div className="detail-meta">
-                <span>📁 {selectedTask.category}</span>
-                <span>📅 {selectedTask.due}</span>
+            
+            {/* Title / Inline Editor at the Top */}
+            <div className="detail-header-wrapper">
+              <div className="detail-header-left">
+                {isEditingHeader ? (
+                  <div className="inline-editor-form">
+                    <div className="form-group">
+                      <label>Task Title</label>
+                      <input 
+                        type="text" 
+                        value={editTitle}
+                        onChange={e => setEditTitle(e.target.value)}
+                        className="inline-title-input"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="title-and-status">
+                    <div className="task-check-circle-wrapper header-check" onClick={(e) => { e.stopPropagation(); handleToggleTask(activeTask.id, activeTask.done); }}>
+                      <div className={`check-circle ${activeTask.done ? 'checked' : ''}`}>{activeTask.done && '✓'}</div>
+                    </div>
+                    <h3>{activeTask.text}</h3>
+                  </div>
+                )}
+              </div>
+              <div className="detail-header-right">
+                <button className="btn-secondary btn-sm edit-header-btn" onClick={isEditingHeader ? saveHeaderEdits : startEditingHeader}>
+                  {isEditingHeader ? '💾 Save Title' : '✏️ Edit Title'}
+                </button>
+                {isEditingHeader && (
+                  <button className="btn-secondary btn-sm cancel-header-btn" onClick={() => setIsEditingHeader(false)}>
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
-            {selectedTask.subtasks && selectedTask.subtasks.length > 0 && (
-              <div className="detail-section">
-                <h5>Subtasks</h5>
-                <div className="subtask-list">
-                  {selectedTask.subtasks.map((st, i) => (
-                    <div key={i} className="subtask-item">
-                      <div className="subtask-check"></div>
-                      <span>{st}</span>
+
+            <div className="detail-panel-body-grid">
+              {/* Left Column: Navigation Tabs & Tab Content */}
+              <div className="detail-body-left-column">
+                <div className="detail-tabs-nav">
+                  <button className={activeTab === 'subtasks' ? 'active' : ''} onClick={() => setActiveTab('subtasks')}>
+                    📋 Subtasks
+                  </button>
+                  <button className={activeTab === 'timer' ? 'active' : ''} onClick={() => setActiveTab('timer')}>
+                    ⏱️ Focus Timer
+                  </button>
+                  <button className={activeTab === 'notes' ? 'active' : ''} onClick={() => setActiveTab('notes')}>
+                    📝 Notes
+                  </button>
+                  <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>
+                    🕒 Activity Log
+                  </button>
+                </div>
+
+                {/* Tab content areas */}
+                {activeTab === 'subtasks' && (
+                  <div className="tab-content-container">
+                    <div className="subtask-live-progress">
+                      <div className="progress-labels">
+                        <span>Progress</span>
+                        <span>{percentComplete}% ({completedSubtasks}/{totalSubtasks})</span>
+                      </div>
+                      <div className="progress-bar-track-detail">
+                        <div className="progress-bar-fill-detail" style={{ width: `${percentComplete}%` }}></div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="subtasks-section-header">
+                      <h5>Subtasks Checklist</h5>
+                    </div>
+
+                    <div className="subtask-list">
+                      {normalizedSubtasks.length === 0 ? (
+                        <p className="no-subtasks-text">No subtasks added yet. Type a subtask below to add one.</p>
+                      ) : (
+                        normalizedSubtasks.map((st, i) => (
+                          <div 
+                            key={i} 
+                            className={`subtask-item ${st.done ? 'done' : ''}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, i)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, i)}
+                          >
+                            <div className="drag-handle-dots" title="Drag to reorder">⋮⋮</div>
+                            <div className="subtask-check" onClick={() => handleToggleSubtask(i)}>
+                              {st.done && '✓'}
+                            </div>
+                            <span className="subtask-text-span">{st.text}</span>
+                            <div className="subtask-actions">
+                              <button className="arrow-btn" disabled={i === 0} onClick={() => handleReorderArrows(i, 'up')} title="Move Up">▲</button>
+                              <button className="arrow-btn" disabled={i === normalizedSubtasks.length - 1} onClick={() => handleReorderArrows(i, 'down')} title="Move Down">▼</button>
+                              <button className="subtask-del-btn" onClick={() => handleDeleteSubtask(i)} title="Delete Subtask">🗑️</button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <form onSubmit={handleAddSubtaskInline} className="inline-add-subtask-form">
+                      <input 
+                        type="text" 
+                        placeholder="Add new subtask inline..."
+                        value={newSubtaskText}
+                        onChange={e => setNewSubtaskText(e.target.value)}
+                      />
+                      <button type="submit" className="btn-primary btn-xs">+ Add</button>
+                    </form>
+                  </div>
+                )}
+
+                {activeTab === 'timer' && (
+                  <div className="tab-content-container timer-tab-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="timer-headline" style={{ marginBottom: '16px', textAlign: 'center' }}>
+                      <h5>Focus Session Timer</h5>
+                      <p className="timer-task-label">Active: <strong>{activeTask.text}</strong></p>
+                    </div>
+
+                    <div className="pomodoro-timer-circle" style={{ marginBottom: '20px' }}>
+                      <div className="circular-time-display">
+                        {String(timerMinutes).padStart(2, '0')}:{String(timerSeconds).padStart(2, '0')}
+                      </div>
+                      <span className="timer-state-label">
+                        {timerIsRunning ? '⚡ Focus Active' : '⏸️ Paused'}
+                      </span>
+                    </div>
+
+                    {!showSaveSessionBox ? (
+                      <div className="timer-control-buttons" style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        {/* If timer hasn't started */}
+                        {timerMinutes === 0 && timerSeconds === 0 && !timerIsRunning ? (
+                          <>
+                            <button 
+                              className="btn-primary btn-sm"
+                              onClick={handleStartTimer}
+                            >
+                              ▶️ Start Focus Session
+                            </button>
+                            <button className="btn-secondary btn-sm" onClick={handleResetTimer}>
+                              🔄 Reset Timer
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* If timer has started (running or paused) */}
+                            <button 
+                              className={`btn-primary btn-sm ${timerIsRunning ? 'pause-style' : ''}`}
+                              onClick={handleStartTimer}
+                            >
+                              {timerIsRunning ? '⏸️ Stop Timer' : '▶️ Resume Timer'}
+                            </button>
+                            <button 
+                              className="btn-secondary btn-sm"
+                              style={{ borderColor: 'var(--accent-green)', color: 'var(--accent-green-light)', background: 'rgba(16,185,129,0.05)' }}
+                              onClick={handleFinishSessionClick}
+                            >
+                              ⏹️ Finish Study Session
+                            </button>
+                            <button className="btn-secondary btn-sm" onClick={handleResetTimer}>
+                              🔄 Reset Timer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveStudySession} className="save-study-session-box widget" style={{ width: '100%', maxWidth: '300px', padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 'var(--radius-xl)' }}>
+                        <h6 style={{ margin: '0 0 10px 0', fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'bold' }}>Save Study Session</h6>
+                        <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                          Session duration: <strong>{formatTimeStudied(timerMinutes, timerSeconds)}</strong>
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Implement login logic..." 
+                            value={studySessionName}
+                            onChange={e => setStudySessionName(e.target.value)}
+                            required
+                            style={{ 
+                              padding: '8px 12px', 
+                              background: 'rgba(0,0,0,0.3)', 
+                              border: '1px solid var(--glass-border)', 
+                              borderRadius: 'var(--radius-md)', 
+                              color: 'white', 
+                              fontSize: '12px', 
+                              outline: 'none',
+                              width: '100%'
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button type="submit" className="btn-primary btn-xs" style={{ flex: 1, height: '28px', fontSize: '11px' }}>Save Session</button>
+                            <button type="button" className="btn-secondary btn-xs" style={{ flex: 1, height: '28px', fontSize: '11px' }} onClick={() => setShowSaveSessionBox(false)}>Cancel</button>
+                          </div>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'notes' && (
+                  <div className="tab-content-container notes-tab-view">
+                    {notesViewMode === 'editor' ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <h5>{currentNoteId && currentNoteId !== 'new' ? `Editing: ${notesList.find(n => n.id === currentNoteId)?.name || 'Note'}` : 'New Note'}</h5>
+                        </div>
+
+                        <div className="notes-toolbar">
+                          <button 
+                            type="button" 
+                            className="toolbar-btn"
+                            title="Bold (Ctrl+B)" 
+                            onClick={() => {
+                              document.execCommand('bold', false);
+                              handleEditorInput();
+                            }}
+                          >
+                            <strong>B</strong>
+                          </button>
+                          <button 
+                            type="button" 
+                            className="toolbar-btn"
+                            title="Underline (Ctrl+U)" 
+                            onClick={() => {
+                              document.execCommand('underline', false);
+                              handleEditorInput();
+                            }}
+                          >
+                            <u>U</u>
+                          </button>
+                          <button 
+                            type="button" 
+                            className="toolbar-btn"
+                            title="Highlight" 
+                            onClick={toggleHighlight}
+                          >
+                            <span className="highlight-tag">Highlight</span>
+                          </button>
+                        </div>
+
+                        <div
+                          ref={editorRef}
+                          className="notes-editor"
+                          contentEditable
+                          onInput={handleEditorInput}
+                          onBlur={() => {
+                            if (editorRef.current) {
+                              saveNotes(editorRef.current.innerHTML);
+                            }
+                          }}
+                          {...({ placeholder: "Type notes here..." } as any)}
+                        />
+
+                        <div className="notes-save-row" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <button 
+                            className="btn-primary notes-save-btn" 
+                            onClick={() => {
+                              if (currentNoteId && currentNoteId !== 'new') {
+                                const content = editorRef.current ? editorRef.current.innerHTML : notesText;
+                                handleDirectSave(content);
+                              } else {
+                                const curr = notesList.find(n => n.id === currentNoteId);
+                                setNewNoteName(curr ? curr.name : 'Untitled Note');
+                                setShowSaveNoteBox(true);
+                              }
+                            }} 
+                            disabled={savingNotes}
+                          >
+                            💾 Save Note
+                          </button>
+                          <button 
+                            className="reschedule-main-btn"
+                            onClick={() => setNotesViewMode('list')}
+                            style={{ height: '28px', padding: '6px 14px', fontSize: '11px' }}
+                          >
+                            👁️ View My Notes
+                          </button>
+                          <button 
+                            className="reschedule-main-btn"
+                            onClick={() => {
+                              setCurrentNoteId('new');
+                              setNotesText('');
+                              setLastSavedNotes('');
+                              if (editorRef.current) {
+                                editorRef.current.innerHTML = '';
+                              }
+                              showToast('Started new note', 'success');
+                            }}
+                            style={{ height: '28px', padding: '6px 14px', fontSize: '11px', borderColor: 'var(--accent-purple-light)', color: 'var(--accent-purple-light)' }}
+                          >
+                            ➕ New Note
+                          </button>
+                        </div>
+
+                        {showSaveNoteBox && (
+                          <form 
+                            onSubmit={handleSaveNoteSubmit} 
+                            className="save-study-session-box widget" 
+                            style={{ 
+                              marginTop: '16px', 
+                              width: '100%', 
+                              maxWidth: '320px', 
+                              padding: '16px', 
+                              background: 'rgba(255,255,255,0.01)', 
+                              border: '1px solid rgba(255,255,255,0.04)', 
+                              borderRadius: 'var(--radius-xl)' 
+                            }}
+                          >
+                            <h6 style={{ margin: '0 0 10px 0', fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'bold' }}>
+                              {currentNoteId && currentNoteId !== 'new' ? 'Rename & Save Note' : 'Save New Note'}
+                            </h6>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <input 
+                                type="text" 
+                                placeholder="e.g. Project Notes, Chapter 1..." 
+                                value={newNoteName}
+                                onChange={e => setNewNoteName(e.target.value)}
+                                required
+                                style={{ 
+                                  padding: '8px 12px', 
+                                  background: 'rgba(0,0,0,0.3)', 
+                                  border: '1px solid var(--glass-border)', 
+                                  borderRadius: 'var(--radius-md)', 
+                                  color: 'white', 
+                                  fontSize: '12px', 
+                                  outline: 'none',
+                                  width: '100%'
+                                }}
+                              />
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button type="submit" className="btn-primary btn-xs" style={{ flex: 1, height: '28px', fontSize: '11px' }}>Save Note</button>
+                                <button type="button" className="btn-secondary btn-xs" style={{ flex: 1, height: '28px', fontSize: '11px' }} onClick={() => setShowSaveNoteBox(false)}>Cancel</button>
+                              </div>
+                            </div>
+                          </form>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <h5>My Notes ({notesList.length})</h5>
+                          <button 
+                            className="btn-primary btn-xs"
+                            onClick={() => {
+                              setCurrentNoteId('new');
+                              setNotesText('');
+                              setNotesViewMode('editor');
+                              setTimeout(() => {
+                                if (editorRef.current) editorRef.current.innerHTML = '';
+                              }, 50);
+                            }}
+                            style={{ height: '26px', padding: '0 10px', fontSize: '10.5px' }}
+                          >
+                            ➕ New Note
+                          </button>
+                        </div>
+
+                        <div className="saved-notes-list">
+                          {notesList.length === 0 ? (
+                            <p className="no-subtasks-text">No notes saved yet. Click "New Note" to create one.</p>
+                          ) : (
+                            notesList.map((note) => (
+                              <div key={note.id} className="saved-note-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: 'var(--radius-xl)', marginBottom: '8px' }}>
+                                <div className="note-item-info" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <h6 style={{ margin: '0', fontSize: '13px', fontWeight: 'bold', color: 'white' }}>{note.name}</h6>
+                                  <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Last updated: {formatTimeAgo(note.updatedAt)}</span>
+                                </div>
+                                <div className="note-item-actions" style={{ display: 'flex', gap: '6px' }}>
+                                  <button 
+                                    className="btn-primary btn-xs"
+                                    onClick={() => {
+                                      setCurrentNoteId(note.id);
+                                      setNotesText(note.content);
+                                      setNotesViewMode('editor');
+                                      setTimeout(() => {
+                                        if (editorRef.current) editorRef.current.innerHTML = note.content;
+                                      }, 50);
+                                    }}
+                                    style={{ height: '26px', padding: '0 10px', fontSize: '10.5px' }}
+                                  >
+                                    ✏️ Edit
+                                  </button>
+                                  <button 
+                                    className="btn-secondary btn-xs"
+                                    onClick={() => {
+                                      setRenameNoteId(note.id);
+                                      setRenameNoteName(note.name);
+                                      setShowRenameNoteModal(true);
+                                    }}
+                                    style={{ height: '26px', padding: '0 10px', fontSize: '10.5px' }}
+                                  >
+                                    📋 Rename
+                                  </button>
+                                  <button 
+                                    className="btn-secondary btn-xs delete-note-btn"
+                                    style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)', height: '26px', padding: '0 10px', fontSize: '10.5px' }}
+                                    onClick={() => {
+                                      setDeleteNoteId(note.id);
+                                      setDeleteNoteName(note.name);
+                                      setShowDeleteNoteModal(true);
+                                    }}
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div style={{ marginTop: '16px', display: 'block', clear: 'both', width: '100%' }}>
+                          <button 
+                            className="btn-secondary btn-sm"
+                            onClick={() => setNotesViewMode('editor')}
+                            style={{ height: '28px', padding: '6px 14px', fontSize: '11px', display: 'block' }}
+                          >
+                            ⬅️ Back to Editor
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'activity' && (
+                  <div className="tab-content-container activity-log-view">
+                    <h5>Task Activity Log</h5>
+                    <div className="activity-timeline-container">
+                      {(!activeTask.activityLog || activeTask.activityLog.length === 0) ? (
+                        <p className="no-activity-text">No activity logged for this task yet.</p>
+                      ) : (
+                        activeTask.activityLog.slice().reverse().map((log, idx) => (
+                          <div key={idx} className="timeline-item">
+                            <div className="timeline-node"></div>
+                            <div className="timeline-content">
+                              <span className="timeline-text">{log.action}</span>
+                              <span className="timeline-time">{formatTimeAgo(log.timestamp)}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {selectedTask.risk && (
-              <div className="detail-section">
-                <h5>Risk Assessment</h5>
-                <div className="risk-meter">
-                  <div className="risk-meter-fill" style={{
-                    width: `${selectedTask.risk}%`,
-                    background: selectedTask.risk > 70 ? 'var(--accent-red)' : selectedTask.risk > 40 ? 'var(--accent-orange)' : 'var(--accent-green)'
-                  }}></div>
+
+              {/* Right Column: Metadata Panel & Snooze & Delete */}
+              <div className="detail-body-right-column">
+                <div className="metadata-card widget">
+                  <h5>Task Metadata</h5>
+                  
+                  <div className="metadata-field-row">
+                    <span className="field-label">Category</span>
+                    {isEditingHeader ? (
+                      <div style={{ width: '120px' }}>
+                        <CustomSelect 
+                          value={editCategory} 
+                          onChange={setEditCategory} 
+                          options={categories.map(c => ({ value: c, label: c }))} 
+                        />
+                      </div>
+                    ) : (
+                      <span className="field-value category-val" style={{ color: categoryColors[activeTask.category] || 'var(--text-secondary)' }}>
+                        📁 {activeTask.category}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="metadata-field-row">
+                    <span className="field-label">Priority</span>
+                    {isEditingHeader ? (
+                      <div style={{ width: '120px' }}>
+                        <CustomSelect 
+                          value={editPriority} 
+                          onChange={val => setEditPriority(val as Task['priority'])} 
+                          options={[
+                            { value: 'low', label: 'Low' },
+                            { value: 'medium', label: 'Medium' },
+                            { value: 'high', label: 'High' },
+                            { value: 'critical', label: 'Critical' }
+                          ]} 
+                        />
+                      </div>
+                    ) : (
+                      <span className="field-value priority-val" style={{ color: priorityConfig[activeTask.priority].color }}>
+                        {priorityConfig[activeTask.priority].label}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="metadata-field-row">
+                    <span className="field-label">Due Date</span>
+                    {isEditingHeader ? (
+                      <input 
+                        type="text" 
+                        value={editDue} 
+                        onChange={e => setEditDue(e.target.value)}
+                        className="inline-editor-text-input"
+                      />
+                    ) : (
+                      <span className="field-value due-val">
+                        📅 {activeTask.due}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="metadata-field-row">
+                    <span className="field-label">Focus Stats</span>
+                    <span className="field-value sessions-val">
+                      🍅 {activeTask.sessionsCount || 0} session(s) completed
+                    </span>
+                  </div>
+
+                  {/* Actions: Reschedule & Delete */}
+                  <div className="metadata-snooze-action-block">
+                    {!showSnoozeDropdown ? (
+                      <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <button 
+                          className="btn-secondary btn-xs reschedule-main-btn" 
+                          style={{ flex: 1, justifyContent: 'center' }}
+                          onClick={() => setShowSnoozeDropdown(true)}
+                        >
+                          Reschedule Task
+                        </button>
+                        
+                        <div style={{ flex: 1 }}>
+                          <button 
+                            className="btn-secondary btn-xs delete-task-btn" 
+                            style={{ width: '100%', borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)', justifyContent: 'center' }}
+                            onClick={() => setShowDeleteConfirmModal(true)}
+                          >
+                            🗑️ Delete Task
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <form onSubmit={handleCustomSnoozeSubmit} className="side-custom-snooze-form">
+                          <input 
+                            type="datetime-local" 
+                            value={customSnoozeDate}
+                            onChange={e => setCustomSnoozeDate(e.target.value)}
+                            required
+                            style={{ width: '100%' }}
+                          />
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                            <button type="submit" className="btn-primary btn-xs" style={{ flex: 1 }}>Save Date</button>
+                            <button type="button" className="btn-secondary btn-xs" onClick={() => setShowSnoozeDropdown(false)}>Cancel</button>
+                          </div>
+                        </form>
+
+                        <div style={{ marginTop: '12px' }}>
+                          <button 
+                            className="btn-secondary btn-xs delete-task-btn" 
+                            style={{ width: '100%', borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)', justifyContent: 'center' }}
+                            onClick={() => setShowDeleteConfirmModal(true)}
+                          >
+                            🗑️ Delete Task
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="risk-text">
-                  {selectedTask.risk > 70 ? '🚨 High risk — immediate action needed' :
-                    selectedTask.risk > 40 ? '⚠️ Moderate risk — plan your time carefully' : '✅ On track'}
-                </p>
-              </div>
-            )}
-            <div className="detail-section">
-              <h5>AI Recommendation</h5>
-              <div className="detail-ai-rec">
-                <div className="ai-avatar-inner" style={{ width: 24, height: 24 }}></div>
-                <p>Start this task now during your peak focus window (2-4 PM). Estimated completion: 2 hours. Break into 25-min sprints with 5-min breaks.</p>
               </div>
             </div>
             
-            {/* Delete button */}
-            <div style={{ marginTop: '30px', borderTop: '1px solid var(--glass-border)', paddingTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="detail-modal-footer">
               <button 
-                className="btn-secondary btn-sm" 
-                style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)' }}
-                onClick={() => {
-                  deleteTask(selectedTask.id);
+                className="btn-primary done-proceed-btn" 
+                onClick={async () => {
+                  if (isEditingHeader) {
+                    await saveHeaderEdits();
+                  }
+                  await saveNotes(notesText);
                   setSelectedTask(null);
                 }}
               >
-                🗑️ Delete Task
+                Done
               </button>
             </div>
           </div>
@@ -268,119 +1597,123 @@ export default function TasksPage() {
 
       {/* Add Task Modal Overlay */}
       {showAddModal && (
-        <div className="task-detail-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="task-detail-panel widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+        <div className="modal-overlay-centered" onClick={() => setShowAddModal(false)}>
+          <div className="task-create-modal widget" onClick={e => e.stopPropagation()}>
             <button className="detail-close" onClick={() => setShowAddModal(false)}>✕</button>
-            <div className="detail-header" style={{ marginBottom: '24px' }}>
+            <div className="modal-header">
               <h3>Create New Task</h3>
-              <p>Add a task to your Cloud Firestore database</p>
+              <p>Add a task to your Cloud database</p>
             </div>
             
-            <form onSubmit={handleCreateTask} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Task Name</label>
+            <form onSubmit={handleCreateTask} className="task-create-form">
+              <div className="form-group">
+                <label>Task Name</label>
                 <input 
                   type="text" 
                   value={newText} 
                   onChange={e => setNewText(e.target.value)}
-                  placeholder="e.g. Finish Physics Lab Report" 
+                  placeholder="e.g. Draft Quarterly Business Review Presentation" 
                   required
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(0,0,0,0.2)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'white',
-                    outline: 'none'
-                  }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Priority</label>
-                  <select 
+              <div className="form-row-grid" style={{ zIndex: 10 }}>
+                <div className="form-group">
+                  <label>Priority</label>
+                  <CustomSelect 
                     value={newPriority} 
-                    onChange={e => setNewPriority(e.target.value as Task['priority'])}
-                    style={{
-                      padding: '12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="low">💤 Low</option>
-                    <option value="medium">📌 Medium</option>
-                    <option value="high">⚡ High</option>
-                    <option value="critical">🔥 Critical</option>
-                  </select>
+                    onChange={val => setNewPriority(val as Task['priority'])}
+                    options={[
+                      { value: 'low', label: 'Low' },
+                      { value: 'medium', label: 'Medium' },
+                      { value: 'high', label: 'High' },
+                      { value: 'critical', label: 'Critical' }
+                    ]}
+                  />
                 </div>
 
-                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Category</label>
-                  <select 
+                <div className="form-group">
+                  <label>Category</label>
+                  <CustomSelect 
                     value={newCategory} 
-                    onChange={e => setNewCategory(e.target.value)}
-                    style={{
-                      padding: '12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    {categories.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                    onChange={setNewCategory}
+                    options={categories.map(c => ({ value: c, label: c }))}
+                  />
                 </div>
               </div>
 
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Due Date description</label>
+              <div className="form-group">
+                <label>Due Date & Time</label>
                 <input 
-                  type="text" 
+                  type="datetime-local" 
                   value={newDue} 
                   onChange={e => setNewDue(e.target.value)}
-                  placeholder="e.g. Today, 11:59 PM or Tomorrow" 
                   required
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(0,0,0,0.2)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'white',
-                    outline: 'none'
-                  }}
                 />
               </div>
 
-              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Subtasks (comma-separated)</label>
+              <div className="form-group">
+                <label>Subtasks (comma-separated)</label>
                 <input 
                   type="text" 
                   value={newSubtaskInput} 
                   onChange={e => setNewSubtaskInput(e.target.value)}
-                  placeholder="e.g. Chapter 3 Exercises, Chapter 4 Exercises"
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(0,0,0,0.2)',
-                    border: '1px solid var(--glass-border)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'white',
-                    outline: 'none'
-                  }}
+                  placeholder="e.g. Gather slides material, Write executive summary"
                 />
               </div>
 
-              <button type="submit" className="btn-primary" style={{ marginTop: '12px', padding: '14px' }}>
+              <button type="submit" className="btn-primary form-submit-btn">
                 Create Task
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {showDeleteConfirmModal && (
+        <div className="modal-overlay-centered" onClick={() => setShowDeleteConfirmModal(false)}>
+          <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()}>
+            <button className="detail-close" onClick={() => setShowDeleteConfirmModal(false)}>✕</button>
+            <div className="modal-header">
+              <h3>🗑️ Delete Task</h3>
+              <p>Are you sure you want to delete the task?</p>
+            </div>
+            <div className="modal-confirm-actions" style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
+              <button 
+                className="btn-primary" 
+                style={{ background: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.4)', color: 'white', padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={() => {
+                  if (activeTask) {
+                    deleteTask(activeTask.id);
+                    showToast('Task deleted successfully', 'success');
+                    setSelectedTask(null);
+                  }
+                  setShowDeleteConfirmModal(false);
+                }}
+              >
+                Yes, Delete
+              </button>
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={() => setShowDeleteConfirmModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className={`website-toast toast-${toastType}`}>
+          <div className="toast-content">
+            <span className="toast-icon">
+              {toastType === 'success' ? '✅' : toastType === 'warning' ? '⚠️' : 'ℹ️'}
+            </span>
+            <span className="toast-text">{toastMessage}</span>
+          </div>
+          <button className="toast-close" onClick={() => setToastMessage(null)}>✕</button>
         </div>
       )}
     </div>

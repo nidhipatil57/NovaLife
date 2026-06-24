@@ -19,8 +19,16 @@ CREATE TABLE IF NOT EXISTS tasks (
   subtasks JSONB DEFAULT '[]', -- JSON string list: ["Subtask 1", "Subtask 2"]
   risk INT DEFAULT 0,
   ai_generated BOOLEAN DEFAULT FALSE,
+  notes TEXT DEFAULT '',
+  sessions_count INT DEFAULT 0,
+  activity_log JSONB DEFAULT '[]',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Migrations
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sessions_count INT DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS activity_log JSONB DEFAULT '[]';
 
 -- Habits Table
 CREATE TABLE IF NOT EXISTS habits (

@@ -15,7 +15,6 @@ const navItems = [
   { icon: '🤖', label: 'AI Assistant', path: '/ai-assistant' },
   { icon: '🧠', label: 'Brain Dump', path: '/brain-dump' },
   { icon: '🚨', label: 'Rescue Mode', path: '/rescue' },
-  { icon: '🔮', label: 'Future Timeline', path: '/future' },
   { divider: true },
   { icon: '⚙️', label: 'Settings', path: '/settings' },
 ];
@@ -27,12 +26,14 @@ function AIChatbot() {
     { role: 'ai', text: 'Hi Nidhi! 👋 How can I help you today?' },
   ]);
   const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
   const sendMessage = () => {
     if (!input.trim()) return;
     const userMsg = input;
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setInput('');
+    setIsTyping(true);
     setTimeout(() => {
       const responses: Record<string, string> = {
         'plan my day': "I've analyzed your schedule. Here's your optimized plan:\n\n🔴 2:00 PM — Physics Assignment (2h)\n🔵 4:00 PM — Team Meeting (1h)\n🟡 5:30 PM — Math Test Prep (1.5h)\n🟢 7:00 PM — Gym (1h)\n\nYou have 85% chance of completing everything!",
@@ -45,6 +46,7 @@ function AIChatbot() {
         role: 'ai',
         text: key ? responses[key] : "I'd be happy to help! Try: 'plan my day', 'what should I do next', or 'help me study'."
       }]);
+      setIsTyping(false);
     }, 1200);
   };
 
@@ -67,6 +69,15 @@ function AIChatbot() {
             {messages.map((msg, i) => (
               <div key={i} className={`chat-msg ${msg.role}`}><p>{msg.text}</p></div>
             ))}
+            {isTyping && (
+              <div className="chat-msg ai">
+                <div className="typing-indicator" style={{ display: 'flex', gap: '4px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', width: 'fit-content' }}>
+                  <span className="typing-dot" style={{ width: '6px', height: '6px', background: 'var(--text-tertiary)', borderRadius: '50%', animation: 'bounce 1.4s infinite ease-in-out' }}></span>
+                  <span className="typing-dot" style={{ width: '6px', height: '6px', background: 'var(--text-tertiary)', borderRadius: '50%', animation: 'bounce 1.4s infinite ease-in-out', animationDelay: '0.2s' }}></span>
+                  <span className="typing-dot" style={{ width: '6px', height: '6px', background: 'var(--text-tertiary)', borderRadius: '50%', animation: 'bounce 1.4s infinite ease-in-out', animationDelay: '0.4s' }}></span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="chatbot-input">
             <input

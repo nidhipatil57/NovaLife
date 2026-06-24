@@ -25,7 +25,7 @@ import SettingsPage from './pages/SettingsPage';
 import AIAssistantPage from './pages/AIAssistantPage';
 import BrainDumpPage from './pages/BrainDumpPage';
 import RescueModePage from './pages/RescueModePage';
-import FutureTimelinePage from './pages/FutureTimelinePage';
+
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -62,7 +62,7 @@ function App() {
           <Route path="/ai-assistant" element={<AIAssistantPage />} />
           <Route path="/brain-dump" element={<BrainDumpPage />} />
           <Route path="/rescue" element={<RescueModePage />} />
-          <Route path="/future" element={<FutureTimelinePage />} />
+
         </Route>
       </Routes>
     </Router>
