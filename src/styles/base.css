@@ -177,6 +177,12 @@ a:hover {
   font-size: var(--text-sm);
 }
 
+.btn-xs {
+  padding: 6px 12px;
+  font-size: var(--text-xs);
+  border-radius: var(--radius-md);
+}
+
 .btn-lg {
   padding: var(--space-4) var(--space-10);
   font-size: var(--text-lg);
