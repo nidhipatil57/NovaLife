@@ -142,8 +142,7 @@
 
 .kanban-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(255, 255, 255, 0.06) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 0 12px rgba(255, 255, 255, 0.01);
+  animation: task-card-border-glow 3s infinite ease-in-out;
 }
 
 .kanban-card-top {
@@ -546,8 +545,7 @@
 
 .task-card-item:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(255, 255, 255, 0.01);
+  animation: task-card-border-glow 3s infinite ease-in-out;
 }
 
 .task-card-item:hover::before {
@@ -973,7 +971,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
+  padding: 14px 16px;
   background: rgba(255, 255, 255, 0.01);
   border: 1px solid rgba(255, 255, 255, 0.02);
   border-radius: var(--radius-lg);
@@ -1008,14 +1006,14 @@
 }
 
 .subtask-check {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--radius-sm);
   border: 2px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: bold;
   color: white;
   cursor: pointer;
@@ -1033,7 +1031,7 @@
 }
 
 .subtask-text-span {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-primary);
   flex: 1;
 }
@@ -1079,13 +1077,13 @@
 
 .inline-add-subtask-form input {
   flex: 1;
-  height: 30px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 14px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   color: white;
-  font-size: 11px;
+  font-size: 12.5px;
   outline: none;
   transition: all var(--duration-fast);
 }
@@ -1096,9 +1094,9 @@
 }
 
 .inline-add-subtask-form button {
-  height: 30px !important;
-  padding: 0 14px !important;
-  font-size: 11px !important;
+  height: 36px !important;
+  padding: 0 16px !important;
+  font-size: 12px !important;
   border-radius: var(--radius-md) !important;
   display: inline-flex;
   align-items: center;
@@ -1801,4 +1799,32 @@
     border-color: transparent !important;
     overflow: hidden;
   }
+}
+
+@keyframes task-card-border-glow {
+  0%, 100% {
+    border-color: rgba(59, 130, 246, 0.45) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 12px rgba(59, 130, 246, 0.2);
+  }
+  33% {
+    border-color: rgba(139, 92, 246, 0.45) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 12px rgba(139, 92, 246, 0.2);
+  }
+  66% {
+    border-color: rgba(6, 182, 212, 0.45) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), 0 0 12px rgba(6, 182, 212, 0.2);
+  }
+}
+
+.kanban-card.selected-card,
+.task-card-item.selected-card {
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  background: rgba(59, 130, 246, 0.05) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 10px rgba(59, 130, 246, 0.25) !important;
+}
+
+.kanban-card.selection-mode:hover,
+.task-card-item.selection-mode:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59, 130, 246, 0.8) !important;
 }

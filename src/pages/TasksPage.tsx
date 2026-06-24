@@ -99,6 +99,23 @@ export default function TasksPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // Multi-Select Task States
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const handleCardClick = (task: Task) => {
+    if (isSelectionMode) {
+      if (selectedTaskIds.includes(task.id)) {
+        setSelectedTaskIds(prev => prev.filter(id => id !== task.id));
+      } else {
+        setSelectedTaskIds(prev => [...prev, task.id]);
+      }
+    } else {
+      setSelectedTask(task);
+    }
+  };
   
   // Add Task Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -209,7 +226,9 @@ export default function TasksPage() {
   }, [timerIntervalId]);
 
   useEffect(() => {
-    // Reset timer when details panel closes or changes task
+    // Reset timer, tab and snooze dropdown when details panel closes or changes task
+    setActiveTab('subtasks');
+    setShowSnoozeDropdown(false);
     setTimerMinutes(0);
     setTimerSeconds(0);
     setTimerIsRunning(false);
@@ -273,9 +292,11 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (notesViewMode === 'editor' && editorRef.current) {
-      editorRef.current.innerHTML = notesText;
+      if (editorRef.current.innerHTML !== notesText) {
+        editorRef.current.innerHTML = notesText;
+      }
     }
-  }, [notesViewMode, currentNoteId]);
+  }, [notesViewMode, currentNoteId, activeTab, notesText]);
 
   const saveNotes = async (text: string, manual: boolean = false) => {
     if (!activeTask || !currentNoteId || currentNoteId === 'new') return;
@@ -863,18 +884,59 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="task-filters">
-        {(['all', 'active', 'completed'] as const).map(f => (
-          <button key={f} className={`filter-btn ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
-            {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : '✅ Completed'}
-            <span className="filter-count">
-              {f === 'all' ? tasks.filter(t => !t.done).length :
-               f === 'active' ? tasks.filter(t => !t.done).length :
-               tasks.filter(t => t.done).length}
-            </span>
-          </button>
-        ))}
+      {/* Filters & Actions Row */}
+      <div className="task-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="filter-buttons-left" style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+          {(['all', 'active', 'completed'] as const).map(f => (
+            <button key={f} className={`filter-btn ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+              {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : '✅ Completed'}
+              <span className="filter-count">
+                {f === 'all' ? tasks.filter(t => !t.done).length :
+                 f === 'active' ? tasks.filter(t => !t.done).length :
+                 tasks.filter(t => t.done).length}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="filter-actions-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isSelectionMode ? (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn-secondary btn-sm" 
+                style={{ borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)', fontWeight: 'bold' }}
+                onClick={() => {
+                  if (selectedTaskIds.length > 0) {
+                    setShowBulkDeleteConfirm(true);
+                  } else {
+                    showToast('No tasks selected', 'warning');
+                  }
+                }}
+              >
+                🗑️ Delete Selected ({selectedTaskIds.length})
+              </button>
+              <button 
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  setIsSelectionMode(false);
+                  setSelectedTaskIds([]);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button 
+              className="btn-secondary btn-sm" 
+              onClick={() => {
+                setIsSelectionMode(true);
+                setSelectedTaskIds([]);
+              }}
+            >
+              ☑️ Select
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -904,24 +966,25 @@ export default function TasksPage() {
               </div>
               <div className="kanban-cards">
                 {kanbanGroups[priority].map(task => {
-                  const cardSubs: any[] = task.subtasks ? (Array.isArray(task.subtasks) ? task.subtasks : JSON.parse(task.subtasks as any)) : [];
-                  const subCount = cardSubs.length;
-                  const doneCount = cardSubs.filter((st: any) => typeof st === 'object' && st.done).length;
                   return (
                     <div 
                       key={task.id} 
-                      className={`kanban-card widget ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
-                      onClick={() => setSelectedTask(task)}
+                      className={`kanban-card widget ${isSelectionMode ? 'selection-mode' : ''} ${selectedTaskIds.includes(task.id) ? 'selected-card' : ''} ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
+                      onClick={() => handleCardClick(task)}
+                      style={{ position: 'relative' }}
                     >
-                      <div className="kanban-card-top">
+                      {isSelectionMode && (
+                        <div className="card-select-checkbox-overlay" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 10 }}>
+                          <div className={`subtask-check ${selectedTaskIds.includes(task.id) ? 'checked' : ''}`} style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', background: selectedTaskIds.includes(task.id) ? 'var(--accent-blue)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white' }}>
+                            {selectedTaskIds.includes(task.id) && '✓'}
+                          </div>
+                        </div>
+                      )}
+                      <div className="kanban-card-top" style={{ paddingRight: isSelectionMode ? '24px' : '0' }}>
                         <span className="kanban-category" style={{ color: categoryColors[task.category] || 'var(--text-secondary)' }}>{task.category}</span>
                         {task.risk && task.risk > 70 && <span className="kanban-risk">🚨 {task.risk}%</span>}
                       </div>
                       <p className="kanban-task-text">{task.text}</p>
-                      <div className="card-indicators-row" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                        {subCount > 0 && <span>📋 {doneCount}/{subCount}</span>}
-                        {task.sessionsCount && task.sessionsCount > 0 ? <span>🍅 {task.sessionsCount}</span> : null}
-                      </div>
                       <span className="kanban-due">{task.due}</span>
                       {task.aiGenerated && <span className="ai-badge-sm">🤖 AI</span>}
                     </div>
@@ -935,17 +998,21 @@ export default function TasksPage() {
         /* Grid Layout View */
         <div className="task-grid-container">
           {filteredTasks.map(task => {
-            const cardSubs: any[] = task.subtasks ? (Array.isArray(task.subtasks) ? task.subtasks : JSON.parse(task.subtasks as any)) : [];
-            const subCount = cardSubs.length;
-            const doneCount = cardSubs.filter((st: any) => typeof st === 'object' && st.done).length;
-            const compPercent = subCount > 0 ? Math.round((doneCount / subCount) * 100) : 0;
             return (
               <div 
                 key={task.id} 
-                className={`task-card-item widget ${task.done ? 'task-done' : ''} ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
-                onClick={() => setSelectedTask(task)}
+                className={`task-card-item widget ${isSelectionMode ? 'selection-mode' : ''} ${selectedTaskIds.includes(task.id) ? 'selected-card' : ''} ${task.done ? 'task-done' : ''} ${completingTaskIds.includes(task.id) ? 'card-completing' : ''}`} 
+                onClick={() => handleCardClick(task)}
+                style={{ position: 'relative' }}
               >
-                <div className="card-top-row">
+                {isSelectionMode && (
+                  <div className="card-select-checkbox-overlay" style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10 }}>
+                    <div className={`subtask-check ${selectedTaskIds.includes(task.id) ? 'checked' : ''}`} style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', background: selectedTaskIds.includes(task.id) ? 'var(--accent-blue)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white' }}>
+                      {selectedTaskIds.includes(task.id) && '✓'}
+                    </div>
+                  </div>
+                )}
+                <div className="card-top-row" style={{ paddingRight: isSelectionMode ? '24px' : '0' }}>
                   <span className="card-category-badge" style={{ borderColor: categoryColors[task.category] || 'var(--text-secondary)', color: categoryColors[task.category] || 'var(--text-secondary)' }}>
                     {task.category}
                   </span>
@@ -960,25 +1027,7 @@ export default function TasksPage() {
                   <div className="meta-metric due-date-metric">
                     📅 {task.due}
                   </div>
-                  {subCount > 0 && (
-                    <div className="meta-metric subtasks-metric" title="Subtask progress">
-                      📋 {doneCount}/{subCount}
-                    </div>
-                  )}
-                  {task.sessionsCount && task.sessionsCount > 0 ? (
-                    <div className="meta-metric focus-sessions-metric" title="Focus sessions done">
-                      🍅 {task.sessionsCount}
-                    </div>
-                  ) : null}
                 </div>
-
-                {subCount > 0 && (
-                  <div className="card-progress-bar-container">
-                    <div className="card-progress-track">
-                      <div className="card-progress-fill" style={{ width: `${compPercent}%` }}></div>
-                    </div>
-                  </div>
-                )}
 
                 <div className="card-footer-row">
                   <div className="task-check-circle-wrapper" onClick={(e) => { e.stopPropagation(); handleToggleTask(task.id, task.done); }}>
@@ -1244,7 +1293,10 @@ export default function TasksPage() {
                             type="button" 
                             className="toolbar-btn"
                             title="Highlight" 
-                            onClick={toggleHighlight}
+                            onClick={() => {
+                              document.execCommand('backColor', false, 'rgba(255, 235, 59, 0.4)');
+                              handleEditorInput();
+                            }}
                           >
                             <span className="highlight-tag">Highlight</span>
                           </button>
@@ -1697,6 +1749,115 @@ export default function TasksPage() {
                 className="btn-secondary" 
                 style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
                 onClick={() => setShowDeleteConfirmModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRenameNoteModal && (
+        <div className="modal-overlay-centered" onClick={() => setShowRenameNoteModal(false)}>
+          <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '360px' }}>
+            <button className="detail-close" onClick={() => setShowRenameNoteModal(false)}>✕</button>
+            <div className="modal-header">
+              <h3>📋 Rename Note</h3>
+            </div>
+            <form onSubmit={handleRenameNoteSubmit} style={{ marginTop: '16px' }}>
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <input 
+                  type="text" 
+                  value={renameNoteName} 
+                  onChange={e => setRenameNoteName(e.target.value)}
+                  required
+                  style={{ 
+                    padding: '8px 12px', 
+                    background: 'rgba(0,0,0,0.3)', 
+                    border: '1px solid var(--glass-border)', 
+                    borderRadius: 'var(--radius-md)', 
+                    color: 'white', 
+                    fontSize: '12px', 
+                    outline: 'none',
+                    width: '100%'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button type="submit" className="btn-primary" style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}>
+                  Rename
+                </button>
+                <button type="button" className="btn-secondary" style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }} onClick={() => setShowRenameNoteModal(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteNoteModal && (
+        <div className="modal-overlay-centered" onClick={() => setShowDeleteNoteModal(false)}>
+          <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '360px' }}>
+            <button className="detail-close" onClick={() => setShowDeleteNoteModal(false)}>✕</button>
+            <div className="modal-header">
+              <h3>🗑️ Delete Note</h3>
+              <p>Are you sure you want to delete note "{deleteNoteName}"?</p>
+            </div>
+            <div className="modal-confirm-actions" style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
+              <button 
+                className="btn-primary" 
+                style={{ background: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.4)', color: 'white', padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={handleDeleteNoteConfirm}
+              >
+                Yes, Delete
+              </button>
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={() => setShowDeleteNoteModal(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkDeleteConfirm && (
+        <div className="modal-overlay-centered" onClick={() => setShowBulkDeleteConfirm(false)}>
+          <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '380px' }}>
+            <button className="detail-close" onClick={() => setShowBulkDeleteConfirm(false)}>✕</button>
+            <div className="modal-header" style={{ textAlign: 'center' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>🗑️ Delete Tasks</h3>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                Are you sure you want to delete {selectedTaskIds.length} selected task(s)? This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-confirm-actions" style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
+              <button 
+                className="btn-primary" 
+                style={{ background: 'var(--accent-red)', border: '1px solid rgba(239, 68, 68, 0.4)', color: 'white', padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={async () => {
+                  try {
+                    for (const id of selectedTaskIds) {
+                      await deleteTask(id);
+                    }
+                    showToast(`Successfully deleted ${selectedTaskIds.length} tasks`, 'success');
+                    setSelectedTaskIds([]);
+                    setIsSelectionMode(false);
+                  } catch (err) {
+                    showToast('Failed to delete some tasks', 'warning');
+                  }
+                  setShowBulkDeleteConfirm(false);
+                }}
+              >
+                Yes, Delete
+              </button>
+              <button 
+                className="btn-secondary" 
+                style={{ padding: '8px 24px', borderRadius: 'var(--radius-md)', fontSize: '12px', fontWeight: 'bold' }}
+                onClick={() => setShowBulkDeleteConfirm(false)}
               >
                 Cancel
               </button>
