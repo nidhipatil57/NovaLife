@@ -8,7 +8,9 @@ export type CalendarEvent = {
   duration: number; // Duration in hours (e.g. 1.5)
   day: number; // 0 (Sun) to 6 (Sat)
   color: string;
-  type: 'study' | 'meeting' | 'health' | 'focus' | 'work' | 'break';
+  type: 'study' | 'meeting' | 'health' | 'focus' | 'work' | 'break' | 'personal';
+  prepChecklist?: { text: string; done: boolean }[];
+  weekOffset?: number;
 };
 
 export function useCalendarEvents() {
@@ -94,5 +96,38 @@ export function useCalendarEvents() {
     }
   };
 
-  return { events, loading, addEvent, deleteEvent, user };
+  const updateEvent = async (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => {
+    if (!user) {
+      console.error('updateEvent: No user logged in');
+      return undefined;
+    }
+    try {
+      const token = localStorage.getItem('novalife_token');
+      console.log('updateEvent: Sending PUT /api/events/' + id, updates);
+      const response = await fetch(`/api/events/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      console.log('updateEvent: Response status', response.status);
+      if (response.ok) {
+        const updated = await response.json();
+        setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+        return updated;
+      } else {
+        const errorBody = await response.text();
+        console.error('updateEvent: Failed. Status:', response.status, 'Body:', errorBody);
+        return undefined;
+      }
+    } catch (err) {
+      console.error('updateEvent: Network error:', err);
+      return undefined;
+    }
+  };
+
+  return { events, loading, addEvent, deleteEvent, updateEvent, user };
 }
