@@ -1,8 +1,10 @@
+import { useNavigate } from 'react-router-dom';
 import { useTasks } from '../hooks/useTasks';
 import './RescueModePage.css';
 
 export default function RescueModePage() {
   const { tasks, loading, user } = useTasks();
+  const navigate = useNavigate();
 
   // Filter tasks that are active (not done) and have a risk level defined
   const atRiskTasks = tasks
@@ -137,7 +139,7 @@ export default function RescueModePage() {
                 </div>
 
                 <div className="rescue-actions">
-                  <button className="btn-primary btn-sm">🚀 Start Focus Sprint</button>
+                  <button className="btn-primary btn-sm" onClick={() => navigate('/focus')}>🚀 Start Focus Sprint</button>
                 </div>
               </div>
             ))}

@@ -1,9 +1,55 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import './AIAssistantPage.css';
 
-const suggestions = ['Plan my week', 'Schedule my exams', 'Analyze my productivity', 'Help me study for physics', 'What should I do next?', 'Create a workout plan'];
+const suggestions = ['Plan my week', 'Schedule my exams', 'Analyze my productivity', 'Help me study', 'What should I do next?', 'Create a workout plan'];
+
+const renderMarkdown = (text: string) => {
+  return text.split('\n').map((line, i) => {
+    const isBullet = line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*');
+    let lineContent = line;
+    if (isBullet) {
+      lineContent = line.replace(/^[•\-*]\s*/, '');
+    }
+
+    const renderedContent: React.ReactNode[] = [];
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = boldRegex.exec(lineContent)) !== null) {
+      if (match.index > lastIndex) {
+        renderedContent.push(lineContent.substring(lastIndex, match.index));
+      }
+      renderedContent.push(<strong key={match.index}>{match[1]}</strong>);
+      lastIndex = boldRegex.lastIndex;
+    }
+    if (lastIndex < lineContent.length) {
+      renderedContent.push(lineContent.substring(lastIndex));
+    }
+
+    const finalContent = renderedContent.length > 0 ? renderedContent : lineContent;
+
+    if (isBullet) {
+      return (
+        <li key={i} style={{ marginLeft: '16px', listStyleType: 'disc', marginBottom: '4px' }}>
+          {finalContent}
+        </li>
+      );
+    }
+
+    return (
+      <div key={i} style={{ minHeight: '18px', marginBottom: line.trim() === '' ? '12px' : '4px' }}>
+        {finalContent}
+      </div>
+    );
+  });
+};
 
 export default function AIAssistantPage() {
+  const location = useLocation();
+  const prefilledHandledRef = useRef(false);
+
   const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([
     { role: 'ai', text: "Hi Nidhi! 👋 I'm your AI Life Assistant. I can help you plan, schedule, analyze productivity, and more. What would you like to do today?" },
   ]);
@@ -32,6 +78,47 @@ export default function AIAssistantPage() {
     setIsTyping(true);
 
     setTimeout(() => {
+      // Check if message is a task-specific query
+      if (msg.toLowerCase().includes('about this task:')) {
+        const taskNameMatch = msg.match(/about this task:\s*([^(]+)/i);
+        const priorityMatch = msg.match(/priority:\s*([^,)]+)/i);
+        const dueMatch = msg.match(/due:\s*([^,)]+)/i);
+        const subtasksMatch = msg.match(/subtasks:\s*([^)]+)/i);
+
+        const taskName = taskNameMatch ? taskNameMatch[1].trim() : 'Active Task';
+        const priority = priorityMatch ? priorityMatch[1].trim() : 'medium';
+        const due = dueMatch ? dueMatch[1].trim() : 'No due date';
+        const subtasksStr = subtasksMatch ? subtasksMatch[1].trim() : '';
+        const subtasks = subtasksStr ? subtasksStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        const priorityEmoji = priority === 'critical' ? '🔥' : priority === 'high' ? '⚡' : priority === 'medium' ? '📌' : '💤';
+        const timeEst = priority === 'critical' ? '2.5 Hours' : priority === 'high' ? '1.5 Hours' : '45 Minutes';
+        
+        let subtaskStrategyText = '';
+        if (subtasks.length > 0) {
+          subtaskStrategyText = `\n\n**Proposed Execution Plan:**\n` + subtasks.map((st, i) => `${i + 1}️⃣ **${st}**: Focus on this step without distraction.`).join('\n');
+        } else {
+          subtaskStrategyText = `\n\n**Proposed Execution Plan:**\n1️⃣ **Phase 1**: Gather all resources and outline core requirements.\n2️⃣ **Phase 2**: Draft the primary deliverable.\n3️⃣ **Phase 3**: Self-review against goals.`;
+        }
+
+        const customResponse = `📚 **Custom AI Productivity Strategy for: ${taskName}**
+
+⏱️ **Genuine Time Estimate:** ~${timeEst} of focused execution time.
+🎯 **Professional Strategy:**
+• Allocate a dedicated block in your calendar. Since this is marked as **${priorityEmoji} ${priority}** priority, tackle it during your peak energy hours.
+• Minimize cognitive switching: turn off chat/notifications and execute in Pomodoro cycles (50 min work, 10 min break is recommended for deep analytical work).${subtaskStrategyText}
+
+🚨 **Risk Reasoning:**
+• **Due Date**: ${due}. 
+• **Bottlenecks**: Uninterrupted focus required. Delaying this to late evening will increase completion risk by 45% due to cumulative fatigue.
+
+Would you like to start a focus session for this task now? 🚀`;
+
+        setMessages(prev => [...prev, { role: 'ai', text: customResponse }]);
+        setIsTyping(false);
+        return;
+      }
+
       const key = Object.keys(aiResponses).find(k => msg.toLowerCase().includes(k));
       setMessages(prev => [...prev, {
         role: 'ai',
@@ -40,6 +127,13 @@ export default function AIAssistantPage() {
       setIsTyping(false);
     }, 1500);
   };
+
+  useEffect(() => {
+    if (location.state?.prefilledMsg && !prefilledHandledRef.current) {
+      prefilledHandledRef.current = true;
+      sendMessage(location.state.prefilledMsg);
+    }
+  }, [location.state]);
 
   return (
     <div className="ai-assistant-page">
@@ -55,7 +149,7 @@ export default function AIAssistantPage() {
               )}
               <div className="ai-msg-content">
                 <div className="ai-msg-bubble">
-                  <p>{msg.text}</p>
+                  <div>{renderMarkdown(msg.text)}</div>
                 </div>
               </div>
             </div>

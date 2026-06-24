@@ -254,11 +254,11 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
 
 // Add Task
 app.post('/api/tasks', authenticateToken, async (req, res) => {
-  const { text, done, priority, due, category, subtasks, risk, ai_generated } = req.body;
+  const { text, done, priority, due, category, subtasks, risk, ai_generated, notes, sessions_count, activity_log } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO tasks (user_id, text, done, priority, due, category, subtasks, risk, ai_generated) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO tasks (user_id, text, done, priority, due, category, subtasks, risk, ai_generated, notes, sessions_count, activity_log) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
         req.user.id,
         text,
@@ -269,6 +269,9 @@ app.post('/api/tasks', authenticateToken, async (req, res) => {
         JSON.stringify(subtasks || []),
         risk || 0,
         ai_generated || false,
+        notes || '',
+        sessions_count || 0,
+        JSON.stringify(activity_log || []),
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -289,10 +292,18 @@ app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
   let valIndex = 3;
 
   for (const [key, val] of Object.entries(fields)) {
-    const dbKey = key === 'aiGenerated' ? 'ai_generated' : key;
-    if (['text', 'done', 'priority', 'due', 'category', 'subtasks', 'risk', 'ai_generated'].includes(dbKey)) {
+    let dbKey = key;
+    if (key === 'aiGenerated') dbKey = 'ai_generated';
+    if (key === 'sessionsCount') dbKey = 'sessions_count';
+    if (key === 'activityLog') dbKey = 'activity_log';
+
+    if (['text', 'done', 'priority', 'due', 'category', 'subtasks', 'risk', 'ai_generated', 'notes', 'sessions_count', 'activity_log'].includes(dbKey)) {
       setClauses.push(`${dbKey} = $${valIndex}`);
-      queryValues.push(dbKey === 'subtasks' ? JSON.stringify(val) : val);
+      queryValues.push(
+        dbKey === 'subtasks' || dbKey === 'activity_log'
+          ? JSON.stringify(val)
+          : val
+      );
       valIndex++;
     }
   }

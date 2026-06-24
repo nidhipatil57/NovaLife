@@ -1,46 +1,318 @@
-.rescue-page { animation: fadeUp 0.5s var(--ease-out); }
+/* ═══════════════════════════════════════════════════════════
+   Rescue Mode Page — Premium Emergency Styling
+   ═══════════════════════════════════════════════════════════ */
 
-.rescue-header { display: flex; align-items: center; gap: var(--space-6); margin-bottom: var(--space-6); padding: var(--space-6); background: rgba(239,68,68,0.04); border: 1px solid rgba(239,68,68,0.12); border-radius: var(--radius-xl); }
-.rescue-siren { position: relative; }
-.siren-icon { font-size: 40px; animation: scalePulse 1s ease-in-out infinite; display: block; }
-.siren-pulse { position: absolute; inset: -8px; border-radius: 50%; border: 2px solid rgba(239,68,68,0.3); animation: scalePulse 1.5s ease-in-out infinite; }
-.rescue-title { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--font-extrabold); color: var(--accent-red-light); letter-spacing: var(--letter-wider); }
-.rescue-subtitle { font-size: var(--text-sm); color: var(--text-secondary); }
-.rescue-risk-gauge { margin-left: auto; }
-.risk-gauge-svg { width: 100px; height: 65px; }
+.rescue-page {
+  padding: 0 0 40px 0;
+  animation: fadeInUp 0.5s ease-out;
+}
 
-.rescue-ai-plan { display: flex; align-items: flex-start; gap: var(--space-4); padding: var(--space-5) !important; margin-bottom: var(--space-6); background: rgba(6,182,212,0.04) !important; border-color: rgba(6,182,212,0.12) !important; }
-.rescue-ai-msg { font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); }
-.rescue-ai-msg strong { color: var(--text-primary); display: block; margin-bottom: var(--space-2); }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-.rescue-tasks { display: flex; flex-direction: column; gap: var(--space-5); margin-bottom: var(--space-8); }
-.rescue-card { padding: var(--space-6) !important; }
-.rescue-risk-critical { border-left: 4px solid var(--accent-red); }
-.rescue-risk-high { border-left: 4px solid var(--accent-orange); }
-.rescue-risk-medium { border-left: 4px solid var(--accent-blue); }
+/* ─── Emergency Header ─── */
+.rescue-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 28px 32px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.02));
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-xl);
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
 
-.rescue-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--space-5); }
-.step-num { font-size: var(--text-xs); color: var(--accent-red-light); font-weight: var(--font-bold); text-transform: uppercase; letter-spacing: var(--letter-wider); display: block; margin-bottom: var(--space-1); }
-.rescue-card-header h3 { font-size: var(--text-lg); margin-bottom: var(--space-1); }
-.rescue-due { font-size: var(--text-sm); color: var(--text-tertiary); }
-.rescue-risk-circle svg { width: 60px; height: 60px; }
+.rescue-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-red), transparent);
+  animation: scanLine 3s linear infinite;
+}
 
-.rescue-details { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-5); }
-.rescue-detail { display: flex; gap: var(--space-3); font-size: var(--text-sm); color: var(--text-secondary); }
-.rescue-label { color: var(--text-tertiary); flex-shrink: 0; font-weight: var(--font-medium); }
-.rescue-detail.ai-action { padding: var(--space-3); background: rgba(6,182,212,0.06); border-radius: var(--radius-md); border: 1px solid rgba(6,182,212,0.1); }
+@keyframes scanLine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
 
-.rescue-actions { display: flex; gap: var(--space-3); }
+.rescue-siren {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
-/* Emergency Timeline */
-.emergency-schedule { padding: var(--space-6) !important; }
-.emergency-schedule h4 { margin-bottom: var(--space-6); }
-.emergency-timeline { display: flex; flex-direction: column; gap: var(--space-4); }
-.etl-item { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3); border-radius: var(--radius-lg); transition: all var(--duration-fast); }
-.etl-item.active { background: rgba(239,68,68,0.04); }
-.etl-item:hover { background: rgba(255,255,255,0.02); }
-.etl-time { font-size: var(--text-xs); font-weight: var(--font-bold); color: var(--text-tertiary); min-width: 50px; text-align: right; }
+.siren-icon {
+  font-size: 2rem;
+  animation: sirenBlink 1s ease-in-out infinite alternate;
+  z-index: 1;
+  position: relative;
+}
+
+@keyframes sirenBlink {
+  0% { filter: brightness(1); }
+  100% { filter: brightness(1.5); }
+}
+
+.siren-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(239, 68, 68, 0.3);
+  animation: sirenPulse 1.5s ease-out infinite;
+}
+
+@keyframes sirenPulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.rescue-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent-red-light);
+}
+
+.rescue-subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.rescue-risk-gauge {
+  margin-left: auto;
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.risk-gauge-svg {
+  width: 100%;
+  filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.2));
+}
+
+/* ─── AI Emergency Plan ─── */
+.rescue-ai-plan {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 24px;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: var(--radius-xl);
+  margin-bottom: 24px;
+}
+
+.rescue-ai-msg strong {
+  color: var(--accent-red-light);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.rescue-ai-msg p {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ─── At-Risk Task Cards ─── */
+.rescue-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.rescue-card {
+  padding: 24px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.rescue-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+}
+
+.rescue-risk-critical::before { background: var(--accent-red); }
+.rescue-risk-high::before { background: var(--accent-orange); }
+.rescue-risk-medium::before { background: var(--accent-blue); }
+
+.rescue-card:hover {
+  border-color: var(--glass-border-hover);
+  transform: translateX(4px);
+}
+
+.rescue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.rescue-step { flex: 1; }
+
+.step-num {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent-red-light);
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.rescue-step h3 {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.rescue-due {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.rescue-risk-circle {
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.rescue-risk-circle svg {
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.2));
+}
+
+/* ─── Details ─── */
+.rescue-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.rescue-detail {
+  display: flex;
+  gap: 12px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-md);
+}
+
+.rescue-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rescue-detail span:last-child {
+  color: var(--text-secondary);
+}
+
+.rescue-detail.ai-action {
+  background: rgba(59, 130, 246, 0.04);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+/* ─── Actions ─── */
+.rescue-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ─── Emergency Schedule ─── */
+.emergency-schedule {
+  padding: 24px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+}
+
+.emergency-schedule h4 {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.emergency-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.etl-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.2s ease;
+}
+
+.etl-item:last-child { border-bottom: none; }
+
+.etl-item:hover { background: rgba(255, 255, 255, 0.01); padding-left: 8px; }
+
+.etl-item.active {
+  background: rgba(239, 68, 68, 0.04);
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+}
+
+.etl-time {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  min-width: 50px;
+  text-align: center;
+}
+
 .etl-item.active .etl-time { color: var(--accent-red-light); }
-.etl-bar { width: 4px; height: 40px; border-radius: 2px; flex-shrink: 0; }
-.etl-task { display: block; font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-primary); }
-.etl-duration { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+.etl-bar {
+  width: 3px;
+  height: 32px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.etl-content { flex: 1; }
+
+.etl-task {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+}
+
+.etl-duration {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  display: block;
+  margin-top: 2px;
+}

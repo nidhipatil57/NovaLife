@@ -4,10 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import './SettingsPage.css';
 
 const themes = [
-  { name: 'Dark', color: '#070B14', active: true },
-  { name: 'Midnight', color: '#0a0e1a' },
-  { name: 'Cyberpunk', color: '#120018' },
-  { name: 'Aurora', color: '#050a15' },
+  { name: 'Dark', color: '#070B14', accent: '#3B82F6' },
+  { name: 'Midnight', color: '#0a0e1a', accent: '#8B5CF6' },
+  { name: 'Cyberpunk', color: '#120018', accent: '#EC4899' },
+  { name: 'Aurora', color: '#050a15', accent: '#06B6D4' },
 ];
 
 const aiPersonalities = [
@@ -18,6 +18,7 @@ const aiPersonalities = [
 ];
 
 export default function SettingsPage() {
+  const [activeTheme, setActiveTheme] = useState('Dark');
   const [aiMode, setAiMode] = useState('Motivational');
   const [notifications, setNotifications] = useState({ email: true, push: true, desktop: true, sms: false });
   const { user, logout } = useAuth();
@@ -50,15 +51,15 @@ export default function SettingsPage() {
         <div className="settings-section widget">
           <h4>👤 Profile</h4>
           <div className="profile-card">
-            <div className="profile-avatar">{userInitials}</div>
+            <div className="profile-avatar-large">{userInitials}</div>
             <div className="profile-info">
               <div className="form-row">
-                <label>Name</label>
-                <input type="text" defaultValue={displayName} className="settings-input" />
+                <label>Display Name</label>
+                <input type="text" defaultValue={displayName} className="settings-input" placeholder="Your name" />
               </div>
               <div className="form-row">
                 <label>Email</label>
-                <input type="email" defaultValue={userEmail} className="settings-input" />
+                <input type="email" defaultValue={userEmail} className="settings-input" readOnly style={{ opacity: 0.6 }} />
               </div>
               <div className="form-row">
                 <label>Bio</label>
@@ -78,10 +79,13 @@ export default function SettingsPage() {
           <p className="settings-desc">Choose how NovaLife AI communicates with you.</p>
           <div className="ai-personality-grid">
             {aiPersonalities.map(p => (
-              <div key={p.name} className={`personality-card ${aiMode === p.name ? 'active' : ''}`} onClick={() => setAiMode(p.name)}>
+              <div key={p.name}
+                className={`personality-card ${aiMode === p.name ? 'active' : ''}`}
+                onClick={() => setAiMode(p.name)}>
                 <span className="personality-emoji">{p.emoji}</span>
                 <span className="personality-name">{p.name}</span>
                 <span className="personality-desc">{p.desc}</span>
+                {aiMode === p.name && <div className="personality-check">✓</div>}
               </div>
             ))}
           </div>
@@ -90,16 +94,27 @@ export default function SettingsPage() {
               <p>⚡ "Stop scrolling. Open your Physics assignment. Now. You have 2 hours left."</p>
             </div>
           )}
+          {aiMode === 'Motivational' && (
+            <div className="ai-example-msg motivational">
+              <p>🔥 "You're doing amazing! Keep that momentum going — every task you complete brings you closer to greatness!"</p>
+            </div>
+          )}
         </div>
 
         {/* Theme */}
         <div className="settings-section widget">
           <h4>🎨 Theme</h4>
+          <p className="settings-desc">Choose your visual aesthetic.</p>
           <div className="theme-options">
             {themes.map(t => (
-              <div key={t.name} className={`theme-option ${t.active ? 'active' : ''}`}>
-                <div className="theme-preview" style={{ background: t.color }}></div>
-                <span>{t.name}</span>
+              <div key={t.name}
+                className={`theme-option ${activeTheme === t.name ? 'active' : ''}`}
+                onClick={() => setActiveTheme(t.name)}>
+                <div className="theme-preview" style={{ background: t.color }}>
+                  <div className="theme-accent" style={{ background: t.accent }}></div>
+                </div>
+                <span className="theme-name">{t.name}</span>
+                {activeTheme === t.name && <div className="theme-check">✓</div>}
               </div>
             ))}
           </div>
@@ -142,11 +157,12 @@ export default function SettingsPage() {
         {/* Data & Privacy */}
         <div className="settings-section widget">
           <h4>🔒 Data & Privacy</h4>
+          <p className="settings-desc">Manage your account and data.</p>
           <div className="privacy-actions">
             <button className="btn-secondary btn-sm">📥 Export Data</button>
             <button className="btn-secondary btn-sm">🔑 Change Password</button>
-            <button className="btn-secondary btn-sm" onClick={handleLogout} style={{ color: 'var(--accent-orange, #ff9f43)' }}>🚪 Log Out</button>
-            <button className="btn-secondary btn-sm" style={{ color: 'var(--accent-red)' }}>🗑️ Delete Account</button>
+            <button className="btn-secondary btn-sm logout-btn" onClick={handleLogout}>🚪 Log Out</button>
+            <button className="btn-secondary btn-sm delete-btn">🗑️ Delete Account</button>
           </div>
         </div>
       </div>

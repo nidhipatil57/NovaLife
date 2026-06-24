@@ -213,6 +213,25 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* Task Overlay Strip — incomplete tasks reminder */}
+      {tasks.filter(t => !t.done).length > 0 && (
+        <div className="task-overlay-strip widget">
+          <div className="overlay-header">
+            <h4>📌 Incomplete Tasks</h4>
+            <span className="overlay-count">{tasks.filter(t => !t.done).length} remaining</span>
+          </div>
+          <div className="overlay-tasks">
+            {tasks.filter(t => !t.done).slice(0, 5).map(t => (
+              <div key={t.id} className={`overlay-task-item priority-${t.priority}`}>
+                <span className="overlay-dot"></span>
+                <span className="overlay-task-text">{t.text}</span>
+                <span className="overlay-task-due">{t.due}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Add Time Block Modal */}
       {showAddModal && (
         <div className="task-detail-overlay" onClick={() => setShowAddModal(false)}>
@@ -284,6 +303,7 @@ export default function CalendarPage() {
                     <option value="health">🏋️ Health/Gym</option>
                     <option value="work">💻 Work Block</option>
                     <option value="break">☕ Break</option>
+                    <option value="personal">👤 Personal</option>
                   </select>
                 </div>
               </div>
