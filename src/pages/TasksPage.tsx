@@ -97,7 +97,7 @@ export default function TasksPage() {
   const { tasks, loading, user, addTask, toggleTask, deleteTask, updateTask } = useTasks();
   
   const [view, setView] = useState<'list' | 'kanban'>('list');
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   // Multi-Select Task States
@@ -841,6 +841,9 @@ export default function TasksPage() {
     if (filter === 'active') {
       return !t.done || completingTaskIds.includes(t.id);
     }
+    if (filter === 'ai-generated') {
+      return (!t.done || completingTaskIds.includes(t.id)) && !!t.aiGenerated;
+    }
     if (filter === 'completed') {
       return t.done;
     }
@@ -887,12 +890,13 @@ export default function TasksPage() {
       {/* Filters & Actions Row */}
       <div className="task-filters" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px', flexWrap: 'wrap' }}>
         <div className="filter-buttons-left" style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          {(['all', 'active', 'completed'] as const).map(f => (
+          {(['all', 'active', 'ai-generated', 'completed'] as const).map(f => (
             <button key={f} className={`filter-btn ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
-              {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : '✅ Completed'}
+              {f === 'all' ? '📋 All' : f === 'active' ? '⚡ Active' : f === 'ai-generated' ? '🤖 AI Generated' : '✅ Completed'}
               <span className="filter-count">
                 {f === 'all' ? tasks.filter(t => !t.done).length :
                  f === 'active' ? tasks.filter(t => !t.done).length :
+                 f === 'ai-generated' ? tasks.filter(t => !t.done && t.aiGenerated).length :
                  tasks.filter(t => t.done).length}
               </span>
             </button>

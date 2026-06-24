@@ -35,7 +35,13 @@ pool.connect(async (err, client, release) => {
       if (fs.existsSync(schemaPath)) {
         const schemaSql = fs.readFileSync(schemaPath, 'utf8');
         await client.query(schemaSql);
-        console.log('Database schema initialized/verified successfully.');
+        
+        // Custom Migrations for Calendar updates
+        await client.query(`
+          ALTER TABLE events ADD COLUMN IF NOT EXISTS prep_checklist JSONB DEFAULT '[]';
+          ALTER TABLE events ADD COLUMN IF NOT EXISTS week_offset INT DEFAULT 0;
+        `);
+        console.log('Database schema initialized/verified and calendar event columns migrated successfully.');
       } else {
         console.warn('schema.sql file not found, skipping database auto-initialization.');
       }
@@ -554,6 +560,8 @@ app.get('/api/events', authenticateToken, async (req, res) => {
       day: row.day_of_week,
       color: row.color,
       type: row.event_type,
+      prepChecklist: Array.isArray(row.prep_checklist) ? row.prep_checklist : JSON.parse(row.prep_checklist || '[]'),
+      weekOffset: parseInt(row.week_offset) || 0,
     }));
     
     res.json(formattedEvents);
@@ -565,11 +573,11 @@ app.get('/api/events', authenticateToken, async (req, res) => {
 
 // Add Calendar Event
 app.post('/api/events', authenticateToken, async (req, res) => {
-  const { title, start, duration, day, color, type } = req.body;
+  const { title, start, duration, day, color, type, prepChecklist, weekOffset } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO events (user_id, title, start_hour, duration, day_of_week, color, event_type) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO events (user_id, title, start_hour, duration, day_of_week, color, event_type, prep_checklist, week_offset) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.user.id,
         title,
@@ -578,6 +586,8 @@ app.post('/api/events', authenticateToken, async (req, res) => {
         day,
         color || 'var(--accent-blue)',
         type || 'focus',
+        JSON.stringify(prepChecklist || []),
+        weekOffset || 0,
       ]
     );
 
@@ -590,12 +600,69 @@ app.post('/api/events', authenticateToken, async (req, res) => {
       day: row.day_of_week,
       color: row.color,
       type: row.event_type,
+      prepChecklist: Array.isArray(row.prep_checklist) ? row.prep_checklist : JSON.parse(row.prep_checklist || '[]'),
+      weekOffset: parseInt(row.week_offset) || 0,
     };
 
     res.status(201).json(formattedEvent);
   } catch (err) {
     console.error('Error adding event:', err);
     res.status(500).json({ error: 'Error creating event.' });
+  }
+});
+
+// Update Calendar Event
+app.put('/api/events/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, start, duration, day, color, type, prepChecklist, weekOffset } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE events 
+       SET title = $1,
+           start_hour = $2,
+           duration = $3,
+           day_of_week = $4,
+           color = $5,
+           event_type = $6,
+           prep_checklist = $7::jsonb,
+           week_offset = $8
+       WHERE user_id = $9 AND id = $10 
+       RETURNING *`,
+      [
+        title,
+        Number(start),
+        Number(duration),
+        Number(day),
+        color || 'var(--accent-blue)',
+        type || 'focus',
+        JSON.stringify(prepChecklist || []),
+        Number(weekOffset || 0),
+        req.user.id,
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found or unauthorized.' });
+    }
+
+    const row = result.rows[0];
+    const formatted = {
+      id: String(row.id),
+      title: row.title,
+      start: parseFloat(row.start_hour),
+      duration: parseFloat(row.duration),
+      day: row.day_of_week,
+      color: row.color,
+      type: row.event_type,
+      prepChecklist: Array.isArray(row.prep_checklist) ? row.prep_checklist : JSON.parse(row.prep_checklist || '[]'),
+      weekOffset: parseInt(row.week_offset) || 0,
+    };
+
+    res.json(formatted);
+  } catch (err) {
+    console.error('Error updating event:', err);
+    res.status(500).json({ error: 'Error updating event.' });
   }
 });
 
