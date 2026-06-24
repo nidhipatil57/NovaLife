@@ -326,6 +326,7 @@ export default function CalendarPage() {
     return eventStyles;
   };
 
+  /*
   // Dynamic Deadline Heatmap based on active critical/high tasks
   const getDayRisk = (dayName: string) => {
     const activeUrgentTasks = tasks.filter(
@@ -339,6 +340,7 @@ export default function CalendarPage() {
     if (activeUrgentTasks.length === 1) return 'medium';
     return 'low';
   };
+  */
 
 
   // Auto Default Colors for Add Block Modal
@@ -556,12 +558,14 @@ export default function CalendarPage() {
     });
   };
 
+  /*
   const getOverlappingEvent = (e1: CalendarEvent) => {
     return events.find(e2 => {
       if (e1.id === e2.id || e1.day !== e2.day || (e1.weekOffset || 0) !== (e2.weekOffset || 0)) return false;
       return Math.max(e1.start, e2.start) < Math.min(e1.start + e1.duration, e2.start + e2.duration);
     });
   };
+  */
 
   // Calculate Health Check stats for active week
   const totalBlockedHours = currentWeekEvents.reduce((sum, e) => sum + e.duration, 0);
