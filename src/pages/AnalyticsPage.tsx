@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useHabits } from '../hooks/useHabits';
 import { useGoals } from '../hooks/useGoals';
@@ -11,6 +12,10 @@ export default function AnalyticsPage() {
   const { goals, loading: goalsLoading } = useGoals();
 
   const isLoading = tasksLoading || habitsLoading || goalsLoading;
+
+  // Share states
+  const [showShareDropdown, setShowShareDropdown] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // 1. Calculate dynamic weeklyData
   const weeklyData = daysOfWeek.map((day, index) => {
@@ -45,11 +50,330 @@ export default function AnalyticsPage() {
   const maxFocus = Math.max(...weeklyData.map(d => d.focus)) || 1;
   const maxTasks = Math.max(...weeklyData.map(d => d.tasks)) || 1;
 
-  // 3. Category distribution for goals
+  // 3. Goal categories
   const goalCategories = goals.reduce<Record<string, number>>((acc, g) => {
     acc[g.category] = (acc[g.category] || 0) + 1;
     return acc;
   }, {});
+
+  // Helper to draw rounded rectangles on Canvas
+  const drawRoundedRect = (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  };
+
+  // Generate achievements card PNG using Canvas
+  const generatePNGCard = (): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 500;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    // Gradient background
+    const grad = ctx.createLinearGradient(0, 0, 800, 500);
+    grad.addColorStop(0, '#0f0c1b');
+    grad.addColorStop(1, '#05020a');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 800, 500);
+
+    // Glowing radial overlays
+    const glowTL = ctx.createRadialGradient(0, 0, 50, 0, 0, 400);
+    glowTL.addColorStop(0, 'rgba(139, 92, 246, 0.18)'); // Violet
+    glowTL.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glowTL;
+    ctx.fillRect(0, 0, 800, 500);
+
+    const glowBR = ctx.createRadialGradient(800, 500, 50, 800, 500, 400);
+    glowBR.addColorStop(0, 'rgba(6, 182, 212, 0.15)'); // Cyan
+    glowBR.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glowBR;
+    ctx.fillRect(0, 0, 800, 500);
+
+    // Rounded border outer container
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(ctx, 15, 15, 770, 470, 16);
+    ctx.stroke();
+
+    // ─── HEADER ───
+    // Draw Logo Diamond
+    const logoGrad = ctx.createLinearGradient(40, 40, 70, 70);
+    logoGrad.addColorStop(0, '#8b5cf6');
+    logoGrad.addColorStop(1, '#06b6d4');
+    ctx.fillStyle = logoGrad;
+    ctx.beginPath();
+    ctx.moveTo(55, 35);
+    ctx.lineTo(70, 50);
+    ctx.lineTo(55, 65);
+    ctx.lineTo(40, 50);
+    ctx.closePath();
+    ctx.fill();
+
+    // Brand label
+    ctx.fillStyle = '#a78bfa';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('WEEKLY PERFORMANCE REPORT', 80, 42);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText('NovaLife Metrics', 80, 62);
+
+    // User Subtitle
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(`Weekly accomplishments and progress for ${user?.displayName || 'User'}`, 40, 105);
+
+    // Separator line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, 120);
+    ctx.lineTo(760, 120);
+    ctx.stroke();
+
+    // ─── LEFT COLUMN: STATS CARDS ───
+    const cardX = 40;
+    const cardW = 320;
+    const cardH = 75;
+
+    // Card 1: Focus Time
+    const y1 = 140;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, cardX, y1, cardW, cardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('TOTAL FOCUS TIME', cardX + 50, y1 + 25);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('⏱️', cardX + 15, y1 + 45);
+    ctx.fillStyle = '#38bdf8'; // light blue
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`${totalFocusHours} Hours`, cardX + 50, y1 + 52);
+
+    // Card 2: Tasks Completed
+    const y2 = 225;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, cardX, y2, cardW, cardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('TASKS COMPLETED', cardX + 50, y2 + 25);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('✅', cardX + 15, y2 + 45);
+    ctx.fillStyle = '#34d399'; // green
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`${completedTasksCount} / ${tasks.length} Completed`, cardX + 50, y2 + 52);
+
+    // Draw little task completion progress bar inside Card 2
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    drawRoundedRect(ctx, cardX + 50, y2 + 58, 250, 5, 2.5);
+    ctx.fill();
+    const taskPct = tasks.length > 0 ? (completedTasksCount / tasks.length) : 0;
+    if (taskPct > 0) {
+      ctx.fillStyle = '#34d399';
+      drawRoundedRect(ctx, cardX + 50, y2 + 58, 250 * taskPct, 5, 2.5);
+      ctx.fill();
+    }
+
+    // Card 3: Productivity Score
+    const y3 = 310;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, cardX, y3, cardW, cardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('PRODUCTIVITY SCORE', cardX + 50, y3 + 25);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('📈', cardX + 15, y3 + 45);
+    ctx.fillStyle = '#a78bfa'; // purple
+    ctx.font = 'bold 20px sans-serif';
+    
+    let ratingStr = 'Growing';
+    if (avgProductivityScore >= 80) ratingStr = 'Legendary';
+    else if (avgProductivityScore >= 65) ratingStr = 'Optimal';
+    else if (avgProductivityScore >= 45) ratingStr = 'Good';
+
+    ctx.fillText(`${avgProductivityScore} / 100 (${ratingStr})`, cardX + 50, y3 + 52);
+
+    // Card 4: Goal Progress
+    const y4 = 395;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, cardX, y4, cardW, cardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('GOAL PROGRESS', cardX + 50, y4 + 25);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('🎯', cardX + 15, y4 + 45);
+    ctx.fillStyle = '#fb7185'; // rose
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`${avgGoalProgress}% Complete`, cardX + 50, y4 + 52);
+
+    // Goal progress meter
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    drawRoundedRect(ctx, cardX + 50, y4 + 58, 250, 5, 2.5);
+    ctx.fill();
+    if (avgGoalProgress > 0) {
+      ctx.fillStyle = '#fb7185';
+      drawRoundedRect(ctx, cardX + 50, y4 + 58, 250 * (avgGoalProgress / 100), 5, 2.5);
+      ctx.fill();
+    }
+
+    // ─── RIGHT COLUMN: DAILY ACTIVITY TREND CHART ───
+    const chartX = 390;
+    const chartY = 140;
+    const chartW = 370;
+    const chartH = 330;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, chartX, chartY, chartW, chartH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.stroke();
+
+    // Chart title
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('Daily Activity Trend', chartX + 24, chartY + 32);
+
+    // Gridlines (max score is 100)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.lineWidth = 1;
+    const chartBaseY = chartY + 240; // Y base line for chart at value 0
+    const chartMaxHeight = 140;      // Height representing score = 100
+    [0, 50, 100].forEach(scoreVal => {
+      const yLine = chartBaseY - (scoreVal / 100) * chartMaxHeight;
+      ctx.beginPath();
+      ctx.moveTo(chartX + 24, yLine);
+      ctx.lineTo(chartX + chartW - 24, yLine);
+      ctx.stroke();
+
+      // Value label on gridline
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.font = '9px sans-serif';
+      ctx.fillText(`${scoreVal}`, chartX + chartW - 20, yLine + 3);
+    });
+
+    // Draw bars for 7 days
+    weeklyData.forEach((d, i) => {
+      const x = chartX + 32 + i * 44;
+      const valHeight = Math.max(4, (d.score / 100) * chartMaxHeight);
+      const y = chartBaseY - valHeight;
+
+      // Draw bar gradient
+      const barGrad = ctx.createLinearGradient(x, y, x, chartBaseY);
+      barGrad.addColorStop(0, '#8b5cf6'); // Violet
+      barGrad.addColorStop(1, '#3b82f6'); // Blue
+      ctx.fillStyle = barGrad;
+
+      drawRoundedRect(ctx, x, y, 22, valHeight, 4);
+      ctx.fill();
+
+      // Draw daily score text above the bar
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${d.score}`, x + 11, y - 6);
+
+      // Draw day letter
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(d.day, x + 11, chartBaseY + 20);
+    });
+    ctx.textAlign = 'left'; // reset text alignment
+
+    // Small explanation under the chart
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Consistency includes completed habits & task progression', chartX + 24, chartBaseY + 54);
+
+    // ─── FOOTER BRANDING ───
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Empowering mindfulness & routine consistency', 40, 480);
+
+    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    ctx.textAlign = 'right';
+    ctx.fillText(`Date: ${nowStr} • Powered by NovaLife`, 760, 480);
+    ctx.textAlign = 'left';
+
+    return canvas.toDataURL('image/png');
+  };
+
+  const handleDownload = () => {
+    const dataUrl = generatePNGCard();
+    if (dataUrl) {
+      const link = document.createElement('a');
+      link.download = `novalife-weekly-achievements.png`;
+      link.href = dataUrl;
+      link.click();
+      setToastMessage('Achievements dashboard downloaded as PNG!');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handleShare = async (channel: 'whatsapp' | 'email') => {
+    setShowShareDropdown(false);
+    const dataUrl = generatePNGCard();
+    if (!dataUrl) return;
+
+    try {
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], 'novalife-weekly-achievements.png', { type: 'image/png' });
+
+      // Try native Web Share API to attach the file directly without copying/pasting
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'NovaLife Weekly Achievements'
+        });
+        setToastMessage('Opening system share sheet...');
+        setTimeout(() => setToastMessage(null), 3000);
+      } else {
+        // Fallback: Copy PNG to clipboard and open app
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+        const targetLabel = channel === 'whatsapp' ? 'WhatsApp' : 'Email';
+        setToastMessage(`Dashboard copied! Press Ctrl+V (Paste) in ${targetLabel} to share.`);
+        setTimeout(() => setToastMessage(null), 6000);
+
+        if (channel === 'whatsapp') {
+          window.open(`whatsapp://send`, '_self');
+        } else {
+          window.open(`mailto:`, '_blank');
+        }
+      }
+    } catch (err) {
+      console.error('Sharing failed:', err);
+      // Final Fallback: Download
+      const link = document.createElement('a');
+      link.download = `novalife-weekly-achievements.png`;
+      link.href = dataUrl;
+      link.click();
+      setToastMessage('Dashboard downloaded as PNG!');
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+  };
 
   if (!user) {
     return (
@@ -68,6 +392,46 @@ export default function AnalyticsPage() {
         <div>
           <h2>📊 <span className="gradient-text">Analytics</span></h2>
           <p>Deep productivity analysis with AI-powered insights.</p>
+        </div>
+        <div className="page-header-actions share-actions-group">
+          {/* Share Dropdown Wrapper */}
+          <div className="share-dropdown-wrapper">
+            <button 
+              className="icon-btn" 
+              onClick={() => setShowShareDropdown(!showShareDropdown)} 
+              title="Share Weekly Achievements"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+            </button>
+            {showShareDropdown && (
+              <div className="share-dropdown-menu">
+                <button className="dropdown-item" onClick={() => handleShare('whatsapp')}>
+                  💬 WhatsApp
+                </button>
+                <button className="dropdown-item" onClick={() => handleShare('email')}>
+                  ✉️ Email
+                </button>
+              </div>
+            )}
+          </div>
+          {/* Direct Download Button */}
+          <button 
+            className="icon-btn btn-primary" 
+            onClick={handleDownload} 
+            title="Download Dashboard (PNG)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -265,6 +629,14 @@ export default function AnalyticsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Copy notification toast */}
+      {toastMessage && (
+        <div className="session-toast" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000 }}>
+          <span>📋</span>
+          <p>{toastMessage}</p>
+        </div>
       )}
     </div>
   );
