@@ -193,7 +193,7 @@ export default function DashboardLayout() {
         <Outlet />
       </main>
 
-      <AIChatbot />
+      {location.pathname !== '/ai-assistant' && <AIChatbot />}
     </div>
   );
 }
