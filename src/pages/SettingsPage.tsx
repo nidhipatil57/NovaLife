@@ -29,7 +29,18 @@ const aiPersonalities = [
 export default function SettingsPage() {
   const [activeTheme, setActiveTheme] = useState('Dark');
   const [aiMode, setAiMode] = useState('Motivational');
-  const [notifications, setNotifications] = useState({ email: true, push: true, desktop: true, sms: false });
+  const [notifications, setNotifications] = useState({ email: true, push: true, desktop: false, sms: false });
+
+  // Sync actual browser notification status on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotifications(prev => ({
+        ...prev,
+        desktop: Notification.permission === 'granted'
+      }));
+    }
+  }, []);
+
   const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -73,6 +84,51 @@ export default function SettingsPage() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleToggleNotification = async (key: string, val: boolean) => {
+    if (key === 'desktop') {
+      if (!val) {
+        // User wants to turn on desktop notifications
+        if (!('Notification' in window)) {
+          alert('This browser does not support desktop notifications.');
+          return;
+        }
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          new Notification('🔔 NovaLife Notifications Enabled', {
+            body: 'You will now receive desktop notifications from NovaLife!',
+            icon: '/favicon.ico'
+          });
+          setNotifications(prev => ({ ...prev, desktop: true }));
+        } else {
+          alert('Notification permission denied. Please allow notifications in your browser settings.');
+          setNotifications(prev => ({ ...prev, desktop: false }));
+        }
+      } else {
+        // User is turning it off
+        setNotifications(prev => ({ ...prev, desktop: false }));
+      }
+    } else {
+      setNotifications(prev => ({ ...prev, [key]: !val }));
+    }
+  };
+
+  const sendTestNotification = () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support desktop notifications.');
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      new Notification('⚡ NovaLife Focus Check', {
+        body: 'Success! Desktop notifications are working perfectly on your laptop.',
+        icon: '/favicon.ico'
+      });
+    } else if (Notification.permission === 'denied') {
+      alert('Notification permission is blocked. Please enable notifications in your browser URL bar settings.');
+    } else {
+      alert('Notifications are not enabled yet. Toggle the switch to request permission.');
     }
   };
 
@@ -213,12 +269,21 @@ export default function SettingsPage() {
             {Object.entries(notifications).map(([key, val]) => (
               <div key={key} className="notif-row">
                 <span className="notif-label">{key.charAt(0).toUpperCase() + key.slice(1)} Notifications</span>
-                <div className={`block-toggle ${val ? 'on' : ''}`} onClick={() => setNotifications(prev => ({ ...prev, [key]: !val }))}>
+                <div className={`block-toggle ${val ? 'on' : ''}`} onClick={() => handleToggleNotification(key, val)}>
                   <div className="toggle-thumb"></div>
                 </div>
               </div>
             ))}
           </div>
+          {notifications.desktop && (
+            <button 
+              className="btn-secondary btn-sm" 
+              style={{ marginTop: '16px', alignSelf: 'flex-start' }}
+              onClick={sendTestNotification}
+            >
+              ⚡ Test Desktop Notification
+            </button>
+          )}
         </div>
 
         {/* Data & Privacy */}

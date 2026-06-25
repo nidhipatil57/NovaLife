@@ -49,6 +49,31 @@ pool.connect(async (err, client, release) => {
           ALTER TABLE habits ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
           ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
           ALTER TABLE events ADD COLUMN IF NOT EXISTS google_event_id VARCHAR(255);
+          
+          CREATE TABLE IF NOT EXISTS focus_sessions (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(100) NOT NULL,
+            notes TEXT DEFAULT '',
+            duration INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          
+          CREATE TABLE IF NOT EXISTS conversations (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(150) NOT NULL,
+            pinned BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+          
+          CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            conversation_id INT REFERENCES conversations(id) ON DELETE CASCADE,
+            role VARCHAR(10) NOT NULL,
+            text TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
         `);
         console.log('Database schema initialized/verified and calendar/goal columns migrated successfully.');
       } else {
@@ -942,6 +967,166 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Error deleting event.' });
   }
 });
+
+// ------------------- FOCUS SESSIONS CRUD ROUTES -------------------
+
+// Get Focus Sessions
+app.get('/api/focus-sessions', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM focus_sessions WHERE user_id = $1 ORDER BY id DESC', [req.user.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching focus sessions:', err);
+    res.status(500).json({ error: 'Error fetching focus sessions.' });
+  }
+});
+
+// Add Focus Session
+app.post('/api/focus-sessions', authenticateToken, async (req, res) => {
+  const { name, notes, duration } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO focus_sessions (user_id, name, notes, duration) 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [req.user.id, name, notes || '', duration]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding focus session:', err);
+    res.status(500).json({ error: 'Error creating focus session.' });
+  }
+});
+
+// Delete Focus Session
+app.delete('/api/focus-sessions/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM focus_sessions WHERE user_id = $1 AND id = $2 RETURNING *', [
+      req.user.id,
+      id,
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Focus session not found or unauthorized.' });
+    }
+
+    res.json({ message: 'Focus session deleted successfully.', session: result.rows[0] });
+  } catch (err) {
+    console.error('Error deleting focus session:', err);
+    res.status(500).json({ error: 'Error deleting focus session.' });
+  }
+});
+
+// ------------------- CONVERSATIONS & MESSAGES CRUD ROUTES -------------------
+
+// Get Conversations
+app.get('/api/conversations', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM conversations WHERE user_id = $1 ORDER BY pinned DESC, created_at DESC', [req.user.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching conversations:', err);
+    res.status(500).json({ error: 'Error fetching conversations.' });
+  }
+});
+
+// Add Conversation
+app.post('/api/conversations', authenticateToken, async (req, res) => {
+  const { title } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING *`,
+      [req.user.id, title || 'New Conversation']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding conversation:', err);
+    res.status(500).json({ error: 'Error creating conversation.' });
+  }
+});
+
+// Update Conversation (Rename / Pin)
+app.put('/api/conversations/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, pinned } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE conversations 
+       SET title = COALESCE($3, title),
+           pinned = COALESCE($4, pinned)
+       WHERE user_id = $1 AND id = $2 RETURNING *`,
+      [req.user.id, id, title, pinned]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found or unauthorized.' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating conversation:', err);
+    res.status(500).json({ error: 'Error updating conversation.' });
+  }
+});
+
+// Delete Conversation
+app.delete('/api/conversations/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM conversations WHERE user_id = $1 AND id = $2 RETURNING *', [
+      req.user.id,
+      id,
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found or unauthorized.' });
+    }
+
+    res.json({ message: 'Conversation deleted successfully.' });
+  } catch (err) {
+    console.error('Error deleting conversation:', err);
+    res.status(500).json({ error: 'Error deleting conversation.' });
+  }
+});
+
+// Get Messages
+app.get('/api/conversations/:conversationId/messages', authenticateToken, async (req, res) => {
+  const { conversationId } = req.params;
+  try {
+    const convCheck = await pool.query('SELECT * FROM conversations WHERE user_id = $1 AND id = $2', [req.user.id, conversationId]);
+    if (convCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized to access this conversation.' });
+    }
+
+    const result = await pool.query('SELECT * FROM messages WHERE conversation_id = $1 ORDER BY id ASC', [conversationId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching messages:', err);
+    res.status(500).json({ error: 'Error fetching messages.' });
+  }
+});
+
+// Add Message
+app.post('/api/conversations/:conversationId/messages', authenticateToken, async (req, res) => {
+  const { conversationId } = req.params;
+  const { role, text } = req.body;
+  try {
+    const convCheck = await pool.query('SELECT * FROM conversations WHERE user_id = $1 AND id = $2', [req.user.id, conversationId]);
+    if (convCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized to access this conversation.' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO messages (conversation_id, role, text) VALUES ($1, $2, $3) RETURNING *`,
+      [conversationId, role, text]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding message:', err);
+    res.status(500).json({ error: 'Error creating message.' });
+  }
+});
+
 
 // Serve static assets in production (or if build folder exists)
 if (process.env.NODE_ENV === 'production' || fs.existsSync(path.join(__dirname, '../dist'))) {

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useDataContext } from '../context/DataContext';
 import './FocusPage.css';
 
 interface FocusSession {
@@ -35,11 +37,31 @@ export default function FocusPage() {
     Instagram: true, YouTube: true, Twitter: true, Reddit: false, TikTok: true,
   });
   
-  // Custom focus sessions state loaded from localStorage
-  const [pastSessions, setPastSessions] = useState<FocusSession[]>(() => {
-    const saved = localStorage.getItem('past_focus_sessions');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const location = useLocation();
+  const [activeTaskName, setActiveTaskName] = useState(location.state?.taskName || '');
+
+  useEffect(() => {
+    if (location.state?.taskName) {
+      setActiveTaskName(location.state.taskName);
+    }
+  }, [location.state]);
+
+  const { focusSessions, addFocusSession, deleteFocusSession } = useDataContext();
+
+  // Map database focus sessions to FocusSession interface expected by page
+  const pastSessions = focusSessions.map(s => ({
+    id: String(s.id),
+    name: s.name,
+    notes: s.notes,
+    duration: s.duration,
+    date: new Date(s.created_at).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }));
 
   // Modal states
   const [showFinishModal, setShowFinishModal] = useState(false);
@@ -96,43 +118,40 @@ export default function FocusPage() {
   const resetTimer = () => {
     setIsRunning(false);
     setSecondsElapsed(0);
+    setActiveTaskName('');
   };
 
   const finishSession = () => {
     setIsRunning(false);
-    setSessionName('');
+    setSessionName(activeTaskName || '');
     setSessionNotes('');
     setShowFinishModal(true);
   };
 
-  const saveSession = () => {
+  const saveSession = async () => {
     if (!sessionName.trim()) return;
-    const newSession: FocusSession = {
-      id: Date.now().toString(),
-      name: sessionName.trim(),
-      notes: sessionNotes.trim(),
-      duration: secondsElapsed,
-      date: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    };
-    const updated = [newSession, ...pastSessions];
-    setPastSessions(updated);
-    localStorage.setItem('past_focus_sessions', JSON.stringify(updated));
-    setShowFinishModal(false);
-    setSecondsElapsed(0);
+    try {
+      await addFocusSession({
+        name: sessionName.trim(),
+        notes: sessionNotes.trim(),
+        duration: secondsElapsed
+      });
+      setShowFinishModal(false);
+      setSecondsElapsed(0);
+      setActiveTaskName('');
+    } catch (err) {
+      console.error('Failed to save focus session:', err);
+    }
   };
 
-  const deleteSession = (id: string) => {
-    const updated = pastSessions.filter(s => s.id !== id);
-    setPastSessions(updated);
-    localStorage.setItem('past_focus_sessions', JSON.stringify(updated));
-    if (selectedSession && selectedSession.id === id) {
-      setSelectedSession(null);
+  const deleteSession = async (id: string) => {
+    try {
+      await deleteFocusSession(id);
+      if (selectedSession && selectedSession.id === id) {
+        setSelectedSession(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete focus session:', err);
     }
   };
 
@@ -310,6 +329,26 @@ export default function FocusPage() {
             <div className="particle p-15"></div>
             <div className="particle p-16"></div>
           </div>
+          {activeTaskName && (
+            <div className="active-task-indicator" style={{
+              textAlign: 'center',
+              marginBottom: '20px',
+              padding: '10px 18px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              color: 'var(--accent-blue-light)',
+              fontWeight: '600',
+              fontSize: '14px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+            }}>
+              <span className="pulse-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-blue)', display: 'inline-block', boxShadow: '0 0 8px var(--accent-blue)' }}></span>
+              Focusing on: <strong style={{ color: 'var(--text-primary)' }}>{activeTaskName}</strong>
+            </div>
+          )}
           <div className="timer-display">
             <svg viewBox="0 0 200 200" className={`timer-ring ${isRunning ? 'active' : ''}`}>
               <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="5" />

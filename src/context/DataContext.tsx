@@ -1,8 +1,33 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { type Task } from '../hooks/useTasks';
 import { type Habit } from '../hooks/useHabits';
 import { type Goal } from '../hooks/useGoals';
+import { type CalendarEvent } from '../hooks/useCalendarEvents';
+import { parseTaskDueDate } from '../utils/dateParser';
+
+export interface FocusSession {
+  id: string;
+  name: string;
+  notes: string;
+  duration: number; // in seconds
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  pinned: boolean;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'model';
+  text: string;
+  created_at: string;
+}
 
 interface DataContextType {
   tasks: Task[];
@@ -25,6 +50,33 @@ interface DataContextType {
   toggleMilestone: (goalId: string, milestoneIndex: number) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   updateGoal: (id: string, updates: Partial<Goal>) => Promise<boolean>;
+
+  // Events
+  events: CalendarEvent[];
+  loadingEvents: boolean;
+  addEvent: (event: Omit<CalendarEvent, 'id'>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
+  updateEvent: (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => Promise<CalendarEvent | undefined>;
+
+  // Focus Sessions
+  focusSessions: FocusSession[];
+  loadingFocusSessions: boolean;
+  addFocusSession: (session: Omit<FocusSession, 'id' | 'created_at'>) => Promise<void>;
+  deleteFocusSession: (id: string) => Promise<void>;
+
+  // Conversations
+  conversations: Conversation[];
+  loadingConversations: boolean;
+  addConversation: (title?: string) => Promise<Conversation | undefined>;
+  updateConversation: (id: string, updates: { title?: string; pinned?: boolean }) => Promise<void>;
+  deleteConversation: (id: string) => Promise<void>;
+
+  // Messages
+  getMessages: (conversationId: string) => Promise<Message[]>;
+  addMessage: (conversationId: string, role: 'user' | 'model', text: string) => Promise<Message | undefined>;
+
+  // Central Productivity Score
+  productivityScore: number;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -43,6 +95,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Goals state
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loadingGoals, setLoadingGoals] = useState(true);
+
+  // Events state
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+
+  // Focus Sessions state
+  const [focusSessions, setFocusSessions] = useState<FocusSession[]>([]);
+  const [loadingFocusSessions, setLoadingFocusSessions] = useState(true);
+
+  // Conversations state
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(true);
 
   // 1. Fetch Tasks
   useEffect(() => {
@@ -178,6 +242,102 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchGoals();
+  }, [user]);
+
+  // 4. Fetch Events
+  useEffect(() => {
+    if (!user) {
+      setEvents([]);
+      setLoadingEvents(false);
+      return;
+    }
+
+    const fetchEvents = async () => {
+      setLoadingEvents(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const response = await fetch('/api/events', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setEvents(data);
+        }
+      } catch (err) {
+        console.error('Error fetching events:', err);
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+
+    fetchEvents();
+  }, [user]);
+
+  // 5. Fetch Focus Sessions
+  useEffect(() => {
+    if (!user) {
+      setFocusSessions([]);
+      setLoadingFocusSessions(false);
+      return;
+    }
+
+    const fetchFocusSessions = async () => {
+      setLoadingFocusSessions(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const response = await fetch('/api/focus-sessions', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setFocusSessions(data);
+        }
+      } catch (err) {
+        console.error('Error fetching focus sessions:', err);
+      } finally {
+        setLoadingFocusSessions(false);
+      }
+    };
+
+    fetchFocusSessions();
+  }, [user]);
+
+  // 6. Fetch Conversations
+  useEffect(() => {
+    if (!user) {
+      setConversations([]);
+      setLoadingConversations(false);
+      return;
+    }
+
+    const fetchConversations = async () => {
+      setLoadingConversations(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const response = await fetch('/api/conversations', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setConversations(data);
+        }
+      } catch (err) {
+        console.error('Error fetching conversations:', err);
+      } finally {
+        setLoadingConversations(false);
+      }
+    };
+
+    fetchConversations();
   }, [user]);
 
   // Task Actions
@@ -576,27 +736,345 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Event Actions
+  const addEvent = async (event: Omit<CalendarEvent, 'id'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(event),
+      });
+
+      if (response.ok) {
+        const newEvent = await response.json();
+        setEvents((prev) => [...prev, newEvent]);
+      }
+    } catch (err) {
+      console.error('Error adding event:', err);
+    }
+  };
+
+  const deleteEvent = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/events/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setEvents((prev) => prev.filter((e) => e.id !== id));
+      }
+    } catch (err) {
+      console.error('Error deleting event:', err);
+    }
+  };
+
+  const updateEvent = async (id: string, updates: Partial<Omit<CalendarEvent, 'id'>>) => {
+    if (!user) return undefined;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/events/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+        return updated;
+      }
+    } catch (err) {
+      console.error('Error updating event:', err);
+    }
+    return undefined;
+  };
+
+  // Focus Session Actions
+  const addFocusSession = async (session: Omit<FocusSession, 'id' | 'created_at'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch('/api/focus-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(session),
+      });
+
+      if (response.ok) {
+        const s = await response.json();
+        setFocusSessions((prev) => [s, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error adding focus session:', err);
+    }
+  };
+
+  const deleteFocusSession = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/focus-sessions/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setFocusSessions((prev) => prev.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      console.error('Error deleting focus session:', err);
+    }
+  };
+
+  // Conversation Actions
+  const addConversation = async (title?: string) => {
+    if (!user) return undefined;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title }),
+      });
+
+      if (response.ok) {
+        const c = await response.json();
+        setConversations((prev) => [c, ...prev]);
+        return c;
+      }
+    } catch (err) {
+      console.error('Error adding conversation:', err);
+    }
+    return undefined;
+  };
+
+  const updateConversation = async (id: string, updates: { title?: string; pinned?: boolean }) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/conversations/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (response.ok) {
+        await response.json();
+        setConversations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+              .sort((a, b) => {
+                const aPinned = a.id === id ? (updates.pinned !== undefined ? updates.pinned : a.pinned) : a.pinned;
+                const bPinned = b.id === id ? (updates.pinned !== undefined ? updates.pinned : b.pinned) : b.pinned;
+                if (aPinned && !bPinned) return -1;
+                if (!aPinned && bPinned) return 1;
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              })
+        );
+      }
+    } catch (err) {
+      console.error('Error updating conversation:', err);
+    }
+  };
+
+  const deleteConversation = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/conversations/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        setConversations((prev) => prev.filter((c) => c.id !== id));
+      }
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+    }
+  };
+
+  const getMessages = async (conversationId: string) => {
+    if (!user) return [];
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
+    return [];
+  };
+
+  const addMessage = async (conversationId: string, role: 'user' | 'model', text: string) => {
+    if (!user) return undefined;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ role, text }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (err) {
+      console.error('Error adding message:', err);
+    }
+    return undefined;
+  };
+
+  // Central Productivity Score Engine
+  const productivityScore = useMemo(() => {
+    let score = 50; // Base score
+
+    // 1. Tasks Adherence (Weight: 35)
+    if (tasks.length > 0) {
+      tasks.forEach((t) => {
+        if (t.done) {
+          score += 10;
+          if (t.priority === 'high' || t.priority === 'critical') {
+            score += 5; // Extra bonus for critical work completion
+          }
+        } else {
+          // Check if task is overdue
+          const dueDate = parseTaskDueDate(t.due);
+          if (dueDate && dueDate.getTime() < Date.now()) {
+            score -= 15; // Major penalty for past deadlines
+          }
+        }
+      });
+    }
+
+    // 2. Goal Progress & Milestones (Weight: 20)
+    goals.forEach((g) => {
+      let milestonesDone = 0;
+      if (g.milestones && g.milestones.length > 0) {
+        g.milestones.forEach((m: any) => {
+          if (m.done) {
+            score += 8;
+            milestonesDone++;
+          }
+        });
+        if (milestonesDone === g.milestones.length) {
+          score += 25; // Massive goal achievement bonus
+        }
+      } else if (g.progress === 100) {
+        score += 25;
+      }
+    });
+
+    // 3. Habit Completion & Streaks (Weight: 20)
+    if (habits.length > 0) {
+      const avgRate = habits.reduce((acc, h) => acc + (h.rate || 0), 0) / habits.length;
+      score += Math.min(20, avgRate * 0.2); // Up to +20 for habit rates
+
+      const maxStreak = Math.max(...habits.map((h) => h.streak || 0), 0);
+      score += Math.min(20, maxStreak * 2); // +2 per streak day, max 20
+
+      if (maxStreak >= 30) {
+        score += 30; // Legendary 30-day streak bonus!
+      }
+    }
+
+    // 4. Focus Session Completion (Weight: 15)
+    if (focusSessions.length > 0) {
+      score += focusSessions.length * 5; // +5 points per session completed
+      const totalMinutes = focusSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60;
+      score += Math.min(25, totalMinutes * 0.2); // +0.2 points per focus minute, max +25
+    }
+
+    // 5. Calendar Event Checklist Adherence (Weight: 10)
+    events.forEach((e) => {
+      if (e.prepChecklist && e.prepChecklist.length > 0) {
+        e.prepChecklist.forEach((item) => {
+          if (item.done) {
+            score += 5; // Checklist item completed
+          }
+        });
+      }
+    });
+
+    // Clamp score between 0 and 100
+    return Math.max(0, Math.min(100, Math.round(score)));
+  }, [tasks, habits, goals, focusSessions, events]);
+
   return (
-    <DataContext.Provider value={{
-      tasks,
-      loadingTasks,
-      addTask,
-      updateTask,
-      toggleTask,
-      deleteTask,
-      habits,
-      loadingHabits,
-      addHabit,
-      toggleHabitDay,
-      deleteHabit,
-      updateHabit,
-      goals,
-      loadingGoals,
-      addGoal,
-      toggleMilestone,
-      deleteGoal,
-      updateGoal
-    }}>
+    <DataContext.Provider
+      value={{
+        tasks,
+        loadingTasks,
+        addTask,
+        updateTask,
+        toggleTask,
+        deleteTask,
+        habits,
+        loadingHabits,
+        addHabit,
+        toggleHabitDay,
+        deleteHabit,
+        updateHabit,
+        goals,
+        loadingGoals,
+        addGoal,
+        toggleMilestone,
+        deleteGoal,
+        updateGoal,
+        events,
+        loadingEvents,
+        addEvent,
+        deleteEvent,
+        updateEvent,
+        focusSessions,
+        loadingFocusSessions,
+        addFocusSession,
+        deleteFocusSession,
+        conversations,
+        loadingConversations,
+        addConversation,
+        updateConversation,
+        deleteConversation,
+        getMessages,
+        addMessage,
+        productivityScore,
+      }}
+    >
       {children}
     </DataContext.Provider>
   );

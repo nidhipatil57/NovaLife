@@ -316,3 +316,15 @@
   display: block;
   margin-top: 2px;
 }
+
+@keyframes pulseRed {
+  0% {
+    color: var(--accent-red-light);
+    opacity: 0.8;
+  }
+  100% {
+    color: var(--accent-red);
+    opacity: 1;
+  }
+}
+
