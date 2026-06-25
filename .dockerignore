@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+README.md
+task.md
+walkthrough.md
+implementation_plan.md

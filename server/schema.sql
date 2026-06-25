@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100) NOT NULL,
   email VARCHAR(100) UNIQUE NOT NULL,
   password_hash VARCHAR(255), -- Nullable for Google-only users
+  google_refresh_token TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS habits (
   rate INT DEFAULT 0,
   week JSONB DEFAULT '[false,false,false,false,false,false,false]', -- Mon-Sun completion array
   color VARCHAR(50) DEFAULT 'var(--accent-blue)',
+  notes TEXT DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -53,6 +55,11 @@ CREATE TABLE IF NOT EXISTS goals (
   progress INT DEFAULT 0,
   color VARCHAR(50) DEFAULT 'var(--accent-blue)',
   milestones JSONB DEFAULT '[]', -- JSON milestones array: [{"text": "M1", "done": false}]
+  completed_by VARCHAR(50) DEFAULT '',
+  completed_dates JSONB DEFAULT '[]',
+  streak INT DEFAULT 0,
+  notes TEXT DEFAULT '',
+  ai_generated BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -66,5 +73,6 @@ CREATE TABLE IF NOT EXISTS events (
   day_of_week INT NOT NULL, -- 0 (Sun) to 6 (Sat)
   color VARCHAR(50) DEFAULT 'var(--accent-blue)',
   event_type VARCHAR(50) DEFAULT 'focus', -- focus, study, break, etc.
+  google_event_id VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useHabits } from '../hooks/useHabits';
+import { useHabits, type Habit } from '../hooks/useHabits';
 import './HabitsPage.css';
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -14,13 +14,23 @@ const colorsConfig = [
 ];
 
 export default function HabitsPage() {
-  const { habits, loading, addHabit, toggleHabitDay, deleteHabit, user } = useHabits();
+  const { habits, loading, addHabit, toggleHabitDay, deleteHabit, updateHabit, user } = useHabits();
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newTarget, setNewTarget] = useState('');
   const [newColor, setNewColor] = useState('var(--accent-blue)');
+  const [newNotes, setNewNotes] = useState('');
+  
+  // Edit modal states
+  const [selectedHabitForEdit, setSelectedHabitForEdit] = useState<Habit | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editTarget, setEditTarget] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editColor, setEditColor] = useState('var(--accent-blue)');
+
+  const [habitToDelete, setHabitToDelete] = useState<{ id: string; name: string } | null>(null);
 
   const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
@@ -37,26 +47,61 @@ export default function HabitsPage() {
         rate: 0,
         week: [false, false, false, false, false, false, false],
         color: newColor,
+        notes: newNotes,
       });
 
       // Reset
       setNewName('');
       setNewTarget('');
       setNewColor('var(--accent-blue)');
+      setNewNotes('');
       setShowAddModal(false);
     } catch (err) {
       alert('Failed to add habit.');
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete the habit "${name}"?`)) {
-      try {
-        await deleteHabit(id);
-      } catch (err) {
-        alert('Failed to delete habit.');
-      }
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteHabit(id);
+    } catch (err) {
+      alert('Failed to delete habit.');
     }
+  };
+
+  const handleEditClick = (habit: Habit) => {
+    setSelectedHabitForEdit(habit);
+    setEditName(habit.name);
+    setEditTarget(habit.target);
+    setEditNotes(habit.notes || '');
+    setEditColor(habit.color || 'var(--accent-blue)');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedHabitForEdit) return;
+    if (!editName.trim() || !editTarget.trim()) return;
+
+    try {
+      await updateHabit(selectedHabitForEdit.id, {
+        name: editName,
+        target: editTarget,
+        notes: editNotes,
+        color: editColor,
+      });
+      setSelectedHabitForEdit(null);
+    } catch (err) {
+      alert('Failed to update habit.');
+    }
+  };
+
+  const handleDeleteFromEdit = () => {
+    if (!selectedHabitForEdit) return;
+    setHabitToDelete({
+      id: selectedHabitForEdit.id,
+      name: selectedHabitForEdit.name,
+    });
+    setSelectedHabitForEdit(null);
   };
 
   // Calculations for daily score
@@ -167,22 +212,24 @@ export default function HabitsPage() {
                   </div>
                   <span style={{ color: h.color }}>{h.rate}%</span>
                 </div>
-                <div className="habit-delete-cell">
-                  <button 
-                    onClick={() => handleDelete(h.id, h.name)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-tertiary)',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      padding: '4px'
-                    }}
-                    title="Delete Habit"
-                  >
-                    🗑️
-                  </button>
-                </div>
+                 <div className="habit-delete-cell">
+                   <button 
+                     onClick={() => handleEditClick(h)}
+                     className="btn-secondary btn-xs"
+                     style={{
+                       borderColor: 'var(--accent-blue-light)',
+                       color: 'var(--accent-blue-light)',
+                       background: 'rgba(59, 130, 246, 0.05)',
+                       padding: '4px 10px',
+                       fontSize: '11px',
+                       borderRadius: '4px',
+                       fontWeight: 'bold',
+                       cursor: 'pointer'
+                     }}
+                   >
+                     Edit
+                   </button>
+                 </div>
               </div>
             ))}
           </div>
@@ -256,6 +303,26 @@ export default function HabitsPage() {
               </div>
 
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Notes</label>
+                <textarea 
+                  value={newNotes} 
+                  onChange={e => setNewNotes(e.target.value)}
+                  placeholder="Add details, notes, or milestones here..." 
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none',
+                    resize: 'vertical',
+                    minHeight: '80px',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Theme Color</label>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
                   {colorsConfig.map(color => (
@@ -279,10 +346,181 @@ export default function HabitsPage() {
                 </div>
               </div>
 
-              <button type="submit" className="btn-primary" style={{ marginTop: '12px', padding: '14px' }}>
+              <button 
+                type="submit" 
+                className="btn-primary" 
+                style={{ 
+                  marginTop: '12px', 
+                  padding: '10px 16px', 
+                  fontSize: '13px', 
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer' 
+                }}
+              >
                 Create Habit
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Habit Modal Overlay */}
+      {selectedHabitForEdit && (
+        <div className="task-detail-overlay" onClick={() => setSelectedHabitForEdit(null)}>
+          <div className="task-detail-panel widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <button className="detail-close" onClick={() => setSelectedHabitForEdit(null)}>✕</button>
+            <div className="detail-header" style={{ marginBottom: '24px' }}>
+              <h3>Edit Habit</h3>
+              <p>Update habit details in Firestore</p>
+            </div>
+
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Habit Name (with Emoji)</label>
+                <input 
+                  type="text" 
+                  value={editName} 
+                  onChange={e => setEditName(e.target.value)}
+                  placeholder="e.g. 🧘 Daily Meditation" 
+                  required
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Target Goal</label>
+                <input 
+                  type="text" 
+                  value={editTarget} 
+                  onChange={e => setEditTarget(e.target.value)}
+                  placeholder="e.g. 15 minutes or 8 glasses" 
+                  required
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Notes</label>
+                <textarea 
+                  value={editNotes} 
+                  onChange={e => setEditNotes(e.target.value)}
+                  placeholder="Add details, notes, or milestones here..." 
+                  style={{
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'white',
+                    outline: 'none',
+                    resize: 'vertical',
+                    minHeight: '80px',
+                    fontFamily: 'inherit'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Theme Color</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  {colorsConfig.map(color => (
+                    <button
+                      key={color.value}
+                      type="button"
+                      onClick={() => setEditColor(color.value)}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        backgroundColor: color.value,
+                        border: editColor === color.value ? '2px solid white' : 'none',
+                        cursor: 'pointer',
+                        transform: editColor === color.value ? 'scale(1.15)' : 'scale(1)',
+                        transition: 'transform 0.15s ease'
+                      }}
+                      title={color.name}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button 
+                  type="submit" 
+                  className="btn-primary" 
+                  style={{ 
+                    flex: 1, 
+                    padding: '10px 16px', 
+                    fontSize: '13px', 
+                    fontWeight: 'bold',
+                    borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Save Changes
+                </button>
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  onClick={handleDeleteFromEdit}
+                  style={{
+                    borderColor: 'var(--accent-red)',
+                    color: 'var(--accent-red)',
+                    background: 'rgba(239, 68, 68, 0.05)',
+                    padding: '10px 16px',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)'
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {habitToDelete && (
+        <div className="task-detail-overlay" onClick={() => setHabitToDelete(null)}>
+          <div className="task-detail-panel widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <button className="detail-close" onClick={() => setHabitToDelete(null)}>✕</button>
+            <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚠️</div>
+            <h3>Delete Habit</h3>
+            <p style={{ marginTop: '12px', marginBottom: '24px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Are you sure you want to delete the habit <strong>"{habitToDelete.name}"</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setHabitToDelete(null)}>Cancel</button>
+              <button 
+                type="button" 
+                className="btn-primary btn-sm" 
+                onClick={async () => {
+                  if (habitToDelete) {
+                    await handleDelete(habitToDelete.id);
+                    setHabitToDelete(null);
+                  }
+                }}
+                style={{ backgroundColor: 'var(--accent-red)', borderColor: 'var(--accent-red)' }}
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
