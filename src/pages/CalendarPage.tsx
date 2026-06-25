@@ -2,10 +2,42 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarEvents, type CalendarEvent } from '../hooks/useCalendarEvents';
 import { useTasks } from '../hooks/useTasks';
+import { CustomSelect } from '../components/ui/CustomSelect';
 import './CalendarPage.css';
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const timeSlots = Array.from({ length: 14 }, (_, i) => `${i + 7}:00`);
+
+const dayOptions = days.map((d, i) => ({
+  label: d,
+  value: String(i),
+  icon: '📅'
+}));
+
+const typeOptions = [
+  { label: 'Focus Sprint', value: 'focus', icon: '🎧' },
+  { label: 'Study session', value: 'study', icon: '📚' },
+  { label: 'Meeting', value: 'meeting', icon: '💼' },
+  { label: 'Health/Gym', value: 'health', icon: '🏋️' },
+  { label: 'Work Block', value: 'work', icon: '💻' },
+  { label: 'Break', value: 'break', icon: '☕' },
+  { label: 'Personal', value: 'personal', icon: '👤' },
+];
+
+const startOptions = Array.from({ length: 14 }, (_, i) => i + 7).map(hour => ({
+  label: `${hour}:00`,
+  value: String(hour),
+  icon: '⏰'
+}));
+
+const durationOptions = [
+  { label: '30 mins', value: '0.5', icon: '⏳' },
+  { label: '1 hour', value: '1', icon: '⏳' },
+  { label: '1.5 hours', value: '1.5', icon: '⏳' },
+  { label: '2 hours', value: '2', icon: '⏳' },
+  { label: '3 hours', value: '3', icon: '⏳' },
+  { label: '4 hours', value: '4', icon: '⏳' },
+];
 
 const colorsConfig = [
   { name: 'Red', value: 'var(--accent-red)' },
@@ -47,6 +79,7 @@ export default function CalendarPage() {
   const [newDay, setNewDay] = useState(1); // Monday
   const [newColor, setNewColor] = useState('var(--accent-blue)');
   const [newType, setNewType] = useState<CalendarEvent['type']>('focus');
+  const [isModalSourceCell, setIsModalSourceCell] = useState(false);
 
   // Detail Modal / Edit states
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -140,34 +173,48 @@ export default function CalendarPage() {
   // Date Calculation Helpers
   const getEventDate = (day: number, weekOffset: number) => {
     const today = new Date();
-    const currentDay = today.getDay();
-    const date = new Date(today);
-    date.setDate(today.getDate() - currentDay + (weekOffset * 7) + day);
-    date.setHours(0, 0, 0, 0);
+    let currentDay = today.getDay();
+    if (currentDay === 0) currentDay = 7;
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - currentDay + 1 + (weekOffset * 7));
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const offsetFromMonday = day === 0 ? 6 : day - 1;
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + offsetFromMonday);
     return date;
   };
 
   const getWeekOffsetForDate = (date: Date) => {
     const today = new Date();
-    const currentDay = today.getDay();
-    const todaySunday = new Date(today);
-    todaySunday.setDate(today.getDate() - currentDay);
-    todaySunday.setHours(0, 0, 0, 0);
+    let currentDay = today.getDay();
+    if (currentDay === 0) currentDay = 7;
+    const todayMonday = new Date(today);
+    todayMonday.setDate(today.getDate() - currentDay + 1);
+    todayMonday.setHours(0, 0, 0, 0);
     
-    const dateSunday = new Date(date);
-    dateSunday.setDate(date.getDate() - date.getDay());
-    dateSunday.setHours(0, 0, 0, 0);
+    let dateDay = date.getDay();
+    if (dateDay === 0) dateDay = 7;
+    const dateMonday = new Date(date);
+    dateMonday.setDate(date.getDate() - dateDay + 1);
+    dateMonday.setHours(0, 0, 0, 0);
     
-    const diffTime = dateSunday.getTime() - todaySunday.getTime();
+    const diffTime = dateMonday.getTime() - todayMonday.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     return Math.round(diffDays / 7);
   };
 
   const getDayViewDate = () => {
     const today = new Date();
-    const currentDay = today.getDay();
-    const date = new Date(today);
-    date.setDate(today.getDate() - currentDay + (currentWeekOffset * 7) + selectedDayIndex);
+    let currentDay = today.getDay();
+    if (currentDay === 0) currentDay = 7;
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - currentDay + 1 + (currentWeekOffset * 7));
+    startOfWeek.setHours(0, 0, 0, 0);
+    
+    const offsetFromMonday = selectedDayIndex === 0 ? 6 : selectedDayIndex - 1;
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + offsetFromMonday);
     return date;
   };
 
@@ -202,11 +249,11 @@ export default function CalendarPage() {
 
   const getWeekDateRange = (offset: number) => {
     const today = new Date();
-    const currentDay = today.getDay(); // 0 = Sun, 6 = Sat
+    let currentDay = today.getDay();
+    if (currentDay === 0) currentDay = 7;
     
-    // Find Sunday of this week, offset by weeks
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - currentDay + (offset * 7));
+    startOfWeek.setDate(today.getDate() - currentDay + 1 + (offset * 7));
     
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -219,9 +266,14 @@ export default function CalendarPage() {
 
   const getDayDate = (dayIdx: number, offset: number) => {
     const today = new Date();
-    const currentDay = today.getDay();
-    const date = new Date(today);
-    date.setDate(today.getDate() - currentDay + (offset * 7) + dayIdx);
+    let currentDay = today.getDay();
+    if (currentDay === 0) currentDay = 7;
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - currentDay + 1 + (offset * 7));
+    
+    const offsetFromMonday = dayIdx === 0 ? 6 : dayIdx - 1;
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + offsetFromMonday);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -232,13 +284,14 @@ export default function CalendarPage() {
     const month = targetDate.getMonth();
     
     const firstDayIndex = new Date(year, month, 1).getDay(); // 0 = Sun, 6 = Sat
+    const trailingDaysCount = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
     const totalDays = new Date(year, month + 1, 0).getDate(); // days in target month
     
     const gridCells = [];
     
     // Previous month's trailing days
     const prevMonthDays = new Date(year, month, 0).getDate();
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
+    for (let i = trailingDaysCount - 1; i >= 0; i--) {
       const d = new Date(year, month - 1, prevMonthDays - i);
       gridCells.push({
         date: d,
@@ -399,6 +452,7 @@ export default function CalendarPage() {
     setNewColor('var(--accent-purple)');
     
     setNewTitle('');
+    setIsModalSourceCell(true);
     setShowAddModal(true);
   };
 
@@ -543,6 +597,7 @@ export default function CalendarPage() {
     setNewTitle('');
     setNewColor('var(--accent-blue)');
     setNewType('focus');
+    setIsModalSourceCell(false);
     setShowAddModal(true);
   };
 
@@ -716,7 +771,7 @@ export default function CalendarPage() {
               </div>
               {timeSlots.map((t, i) => <div key={i} className="time-slot">{t}</div>)}
             </div>
-            {[0, 1, 2, 3, 4, 5, 6].map(dayIdx => {
+            {[1, 2, 3, 4, 5, 6, 0].map(dayIdx => {
               const dayEvents = currentWeekEvents.filter(e => e.day === dayIdx);
               const positions = getEventPositionStyles(dayEvents);
               const dayTasksDue = getTasksDueOnDay(dayIdx, currentWeekOffset);
@@ -853,22 +908,25 @@ export default function CalendarPage() {
                   );
                 })()}
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  {days.map((d, i) => (
-                    <button 
-                      key={d} 
-                      className={`day-nav-header-btn`}
-                      style={{
-                        background: selectedDayIndex === i ? 'var(--accent-blue)' : 'rgba(255,255,255,0.03)',
-                        border: selectedDayIndex === i ? '1px solid var(--accent-blue-light)' : '1px solid rgba(255,255,255,0.05)',
-                        fontWeight: selectedDayIndex === i ? 'bold' : 'normal',
-                        padding: '4px 10px',
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => setSelectedDayIndex(i)}
-                    >
-                      {d}
-                    </button>
-                  ))}
+                  {[1, 2, 3, 4, 5, 6, 0].map(dayIdx => {
+                    const d = days[dayIdx];
+                    return (
+                      <button 
+                        key={d} 
+                        className={`day-nav-header-btn`}
+                        style={{
+                          background: selectedDayIndex === dayIdx ? 'var(--accent-blue)' : 'rgba(255,255,255,0.03)',
+                          border: selectedDayIndex === dayIdx ? '1px solid var(--accent-blue-light)' : '1px solid rgba(255,255,255,0.05)',
+                          fontWeight: selectedDayIndex === dayIdx ? 'bold' : 'normal',
+                          padding: '4px 10px',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => setSelectedDayIndex(dayIdx)}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="day-slots" style={{ height: `${timeSlots.length * 72}px`, position: 'relative' }}>
@@ -941,7 +999,7 @@ export default function CalendarPage() {
         /* Monthly view — simplified grid */
         <div className="month-view widget">
           <div className="month-header-row">
-            {days.map(d => <div key={d} className="month-day-name">{d}</div>)}
+            {[1, 2, 3, 4, 5, 6, 0].map(dayIdx => <div key={days[dayIdx]} className="month-day-name">{days[dayIdx]}</div>)}
           </div>
           <div className="month-grid">
             {getMonthGridDays(currentMonthOffset).map((cell, i) => {
@@ -1084,91 +1142,42 @@ export default function CalendarPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Day of Week</label>
-                  <select 
-                    value={newDay} 
-                    onChange={e => setNewDay(Number(e.target.value))}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    {days.map((d, i) => (
-                      <option key={d} value={i}>{d}</option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    value={String(newDay)}
+                    onChange={val => setNewDay(Number(val))}
+                    options={dayOptions}
+                    disabled={isModalSourceCell}
+                  />
                 </div>
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Event Type</label>
-                  <select 
-                    value={newType} 
-                    onChange={e => handleTypeChange(e.target.value as CalendarEvent['type'])}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="focus">🎧 Focus Sprint</option>
-                    <option value="study">📚 Study session</option>
-                    <option value="meeting">💼 Meeting</option>
-                    <option value="health">🏋️ Health/Gym</option>
-                    <option value="work">💻 Work Block</option>
-                    <option value="break">☕ Break</option>
-                    <option value="personal">👤 Personal</option>
-                  </select>
+                  <CustomSelect
+                    value={newType}
+                    onChange={val => handleTypeChange(val as CalendarEvent['type'])}
+                    options={typeOptions}
+                  />
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Start Time (Hour)</label>
-                  <select 
-                    value={newStart} 
-                    onChange={e => setNewStart(Number(e.target.value))}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    {Array.from({ length: 14 }, (_, i) => i + 7).map(hour => (
-                      <option key={hour} value={hour}>{hour}:00</option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    value={String(newStart)}
+                    onChange={val => setNewStart(Number(val))}
+                    options={startOptions}
+                    disabled={isModalSourceCell}
+                  />
                 </div>
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Duration (Hours)</label>
-                  <select 
-                    value={newDuration} 
-                    onChange={e => setNewDuration(Number(e.target.value))}
-                    style={{
-                      padding: '8px 12px',
-                      background: '#0E1628',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="0.5">30 mins</option>
-                    <option value="1">1 hour</option>
-                    <option value="1.5">1.5 hours</option>
-                    <option value="2">2 hours</option>
-                    <option value="3">3 hours</option>
-                    <option value="4">4 hours</option>
-                  </select>
+                  <CustomSelect
+                    value={String(newDuration)}
+                    onChange={val => setNewDuration(Number(val))}
+                    options={durationOptions}
+                  />
                 </div>
               </div>
 
@@ -1261,42 +1270,20 @@ export default function CalendarPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Day of Week</label>
-                      <select 
-                        value={selectedEvent.day} 
-                        onChange={e => handleEditField('day', Number(e.target.value))}
-                        style={{
-                          padding: '8px 10px',
-                          background: '#0E1628',
-                          border: '1px solid var(--glass-border)',
-                          borderRadius: 'var(--radius-md)',
-                          color: 'white',
-                          outline: 'none'
-                        }}
-                      >
-                        {days.map((d, i) => (
-                          <option key={d} value={i}>{d}</option>
-                        ))}
-                      </select>
+                      <CustomSelect
+                        value={String(selectedEvent.day)}
+                        onChange={val => handleEditField('day', Number(val))}
+                        options={dayOptions}
+                      />
                     </div>
 
                     <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Start Time (Hour)</label>
-                      <select 
-                        value={selectedEvent.start} 
-                        onChange={e => handleEditField('start', Number(e.target.value))}
-                        style={{
-                          padding: '8px 10px',
-                          background: '#0E1628',
-                          border: '1px solid var(--glass-border)',
-                          borderRadius: 'var(--radius-md)',
-                          color: 'white',
-                          outline: 'none'
-                        }}
-                      >
-                        {Array.from({ length: 14 }, (_, i) => i + 7).map(hour => (
-                          <option key={hour} value={hour}>{hour}:00</option>
-                        ))}
-                      </select>
+                      <CustomSelect
+                        value={String(selectedEvent.start)}
+                        onChange={val => handleEditField('start', Number(val))}
+                        options={startOptions}
+                      />
                     </div>
                   </div>
 
@@ -1382,7 +1369,7 @@ export default function CalendarPage() {
             {/* Modal Footer (Delete & Done Buttons, visible for all tabs) */}
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', marginTop: '16px', display: 'flex', justifyContent: 'space-between' }}>
               <button type="button" className="btn-danger" onClick={handleEventDelete} style={{ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
-                🗑️ Delete Block
+                Delete Block
               </button>
               <button type="button" className="btn-primary" onClick={handleDoneClick} style={{ padding: '6px 20px', minWidth: '80px', fontSize: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}>
                 Done

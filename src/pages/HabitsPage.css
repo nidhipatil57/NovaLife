@@ -45,7 +45,7 @@
 
 .habit-grid-header {
   display: grid;
-  grid-template-columns: 200px repeat(7, 1fr) 100px 120px 40px;
+  grid-template-columns: 200px repeat(7, 1fr) 100px 100px 80px;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -84,7 +84,7 @@
 /* Rows */
 .habit-grid-row {
   display: grid;
-  grid-template-columns: 200px repeat(7, 1fr) 100px 120px 40px;
+  grid-template-columns: 200px repeat(7, 1fr) 100px 100px 80px;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -138,17 +138,17 @@
 }
 
 .habit-day-cell:hover {
-  border-color: var(--hcolor);
+  border-color: var(--accent-purple-light);
   background: rgba(255, 255, 255, 0.02);
   transform: scale(1.08);
 }
 
 .habit-day-cell.completed {
-  background: var(--hcolor);
-  border-color: var(--hcolor);
+  background: var(--text-gradient);
+  border-color: transparent;
   color: white;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  box-shadow: 0 0 12px var(--hcolor);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.45);
   animation: checkPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
@@ -159,8 +159,8 @@
 }
 
 .habit-day-cell.today-cell.completed {
-  border-color: var(--hcolor);
-  box-shadow: 0 0 14px var(--hcolor), inset 0 0 8px rgba(255, 255, 255, 0.3);
+  border-color: transparent;
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.65), inset 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
 @keyframes checkPop {

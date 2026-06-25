@@ -45,13 +45,26 @@
 
 .briefing-stats {
   display: flex;
-  gap: var(--space-8);
+  gap: var(--space-4);
   margin-bottom: var(--space-5);
+  flex-wrap: wrap;
 }
 
 .brief-stat {
   display: flex;
   flex-direction: column;
+  padding: var(--space-3) var(--space-5);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-lg);
+  min-width: 140px;
+  transition: all 0.3s ease;
+}
+
+.brief-stat:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
 }
 
 .brief-stat-value {
@@ -312,4 +325,68 @@
   .briefing-stats { gap: var(--space-4); }
   .dash-grid { grid-template-columns: 1fr; }
   .quick-actions { overflow-x: auto; flex-wrap: nowrap; }
+}
+
+/* ─── Widget Themes & Hover Glows ─── */
+.widget-tasks {
+  border-color: rgba(59, 130, 246, 0.12) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-tasks:hover {
+  border-color: rgba(59, 130, 246, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.12);
+  transform: translateY(-4px);
+}
+
+.widget-score-home {
+  border-color: rgba(139, 92, 246, 0.12) !important;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-score-home:hover {
+  border-color: rgba(139, 92, 246, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.12);
+  transform: translateY(-4px);
+}
+.score-svg-home {
+  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.3));
+}
+
+.widget-deadlines {
+  border-color: rgba(239, 68, 68, 0.12) !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-deadlines:hover {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(239, 68, 68, 0.12);
+  transform: translateY(-4px);
+}
+
+.widget-goals {
+  border-color: rgba(236, 72, 153, 0.12) !important;
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-goals:hover {
+  border-color: rgba(236, 72, 153, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(236, 72, 153, 0.12);
+  transform: translateY(-4px);
+}
+
+.widget-habits {
+  border-color: rgba(16, 185, 129, 0.12) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-habits:hover {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.12);
+  transform: translateY(-4px);
+}
+
+.widget-ai-suggestions {
+  border-color: rgba(6, 182, 212, 0.12) !important;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+}
+.widget-ai-suggestions:hover {
+  border-color: rgba(6, 182, 212, 0.35) !important;
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.12);
+  transform: translateY(-4px);
 }

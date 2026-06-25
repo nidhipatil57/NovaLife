@@ -38,6 +38,33 @@ const formatTimeAgo = (isoString: string) => {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+const formatDueForInput = (dueStr: string | undefined): string => {
+  if (!dueStr || dueStr === 'Today' || dueStr === 'No due date') {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  }
+
+  try {
+    const cleaned = dueStr.replace(/[📅\s]+/g, ' ').trim();
+    const parsedDate = new Date(cleaned);
+    if (!isNaN(parsedDate.getTime())) {
+      const year = parsedDate.getFullYear();
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(parsedDate.getDate()).padStart(2, '0');
+      const hours = String(parsedDate.getHours()).padStart(2, '0');
+      const minutes = String(parsedDate.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+  } catch (e) {
+    console.warn("Failed to parse due date for input:", e);
+  }
+  
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+};
+
 interface Option {
   value: string;
   label: string;
@@ -917,7 +944,7 @@ export default function TasksPage() {
                   }
                 }}
               >
-                🗑️ Delete Selected ({selectedTaskIds.length})
+                Delete Selected ({selectedTaskIds.length})
               </button>
               <button 
                 className="btn-secondary btn-sm"
@@ -1156,7 +1183,7 @@ export default function TasksPage() {
                             <div className="subtask-actions">
                               <button className="arrow-btn" disabled={i === 0} onClick={() => handleReorderArrows(i, 'up')} title="Move Up">▲</button>
                               <button className="arrow-btn" disabled={i === normalizedSubtasks.length - 1} onClick={() => handleReorderArrows(i, 'down')} title="Move Down">▼</button>
-                              <button className="subtask-del-btn" onClick={() => handleDeleteSubtask(i)} title="Delete Subtask">🗑️</button>
+                              <button className="subtask-del-btn" onClick={() => handleDeleteSubtask(i)} title="Delete Subtask">✕</button>
                             </div>
                           </div>
                         ))
@@ -1468,7 +1495,7 @@ export default function TasksPage() {
                                       setShowDeleteNoteModal(true);
                                     }}
                                   >
-                                    🗑️ Delete
+                                    Delete
                                   </button>
                                 </div>
                               </div>
@@ -1586,7 +1613,12 @@ export default function TasksPage() {
                         <button 
                           className="btn-secondary btn-xs reschedule-main-btn" 
                           style={{ flex: 1, justifyContent: 'center' }}
-                          onClick={() => setShowSnoozeDropdown(true)}
+                          onClick={() => {
+                            if (activeTask) {
+                              setCustomSnoozeDate(formatDueForInput(activeTask.due));
+                            }
+                            setShowSnoozeDropdown(true);
+                          }}
                         >
                           Reschedule Task
                         </button>
@@ -1597,7 +1629,7 @@ export default function TasksPage() {
                             style={{ width: '100%', borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)', justifyContent: 'center' }}
                             onClick={() => setShowDeleteConfirmModal(true)}
                           >
-                            🗑️ Delete Task
+                            Delete Task
                           </button>
                         </div>
                       </div>
@@ -1623,7 +1655,7 @@ export default function TasksPage() {
                             style={{ width: '100%', borderColor: 'var(--accent-red)', color: 'var(--accent-red)', background: 'rgba(239,68,68,0.05)', justifyContent: 'center' }}
                             onClick={() => setShowDeleteConfirmModal(true)}
                           >
-                            🗑️ Delete Task
+                            Delete Task
                           </button>
                         </div>
                       </div>
@@ -1731,7 +1763,7 @@ export default function TasksPage() {
           <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()}>
             <button className="detail-close" onClick={() => setShowDeleteConfirmModal(false)}>✕</button>
             <div className="modal-header">
-              <h3>🗑️ Delete Task</h3>
+              <h3>Delete Task</h3>
               <p>Are you sure you want to delete the task?</p>
             </div>
             <div className="modal-confirm-actions" style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
@@ -1766,7 +1798,7 @@ export default function TasksPage() {
           <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '360px' }}>
             <button className="detail-close" onClick={() => setShowRenameNoteModal(false)}>✕</button>
             <div className="modal-header">
-              <h3>📋 Rename Note</h3>
+              <h3>Rename Note</h3>
             </div>
             <form onSubmit={handleRenameNoteSubmit} style={{ marginTop: '16px' }}>
               <div className="form-group" style={{ marginBottom: '16px' }}>
@@ -1805,7 +1837,7 @@ export default function TasksPage() {
           <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '360px' }}>
             <button className="detail-close" onClick={() => setShowDeleteNoteModal(false)}>✕</button>
             <div className="modal-header">
-              <h3>🗑️ Delete Note</h3>
+              <h3>Delete Note</h3>
               <p>Are you sure you want to delete note "{deleteNoteName}"?</p>
             </div>
             <div className="modal-confirm-actions" style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'center' }}>
@@ -1833,7 +1865,7 @@ export default function TasksPage() {
           <div className="task-delete-confirm-modal widget" onClick={e => e.stopPropagation()} style={{ maxWidth: '380px' }}>
             <button className="detail-close" onClick={() => setShowBulkDeleteConfirm(false)}>✕</button>
             <div className="modal-header" style={{ textAlign: 'center' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>🗑️ Delete Tasks</h3>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '8px' }}>Delete Tasks</h3>
               <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                 Are you sure you want to delete {selectedTaskIds.length} selected task(s)? This action cannot be undone.
               </p>

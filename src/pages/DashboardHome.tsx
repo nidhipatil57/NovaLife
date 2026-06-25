@@ -17,7 +17,7 @@ export default function DashboardHome() {
   // Calculations for daily briefing
   const activeTasks = tasks.filter(t => !t.done);
   const highPriorityCount = activeTasks.filter(t => t.priority === 'critical' || t.priority === 'high').length;
-  const atRiskCount = activeTasks.filter(t => t.risk && t.risk > 70).length;
+  const atRiskCount = activeTasks.filter(t => t.due && t.due.toLowerCase().trim() !== 'no due date').length;
 
   const totalTasksCount = tasks.length;
   const completedTasksCount = tasks.filter(t => t.done).length;
@@ -60,7 +60,7 @@ export default function DashboardHome() {
           ) : (
             <p className="briefing-summary">
               You have <strong style={{ color: 'var(--accent-red-light)' }}>{highPriorityCount} high-priority tasks</strong> and{' '}
-              <strong style={{ color: 'var(--accent-orange-light)' }}>{atRiskCount} deadline{atRiskCount !== 1 ? 's' : ''} at risk</strong> today.
+              <strong style={{ color: 'var(--accent-orange-light)' }}>{atRiskCount} deadline{atRiskCount !== 1 ? 's' : ''} approaching</strong>.
             </p>
           )}
           <div className="briefing-stats">
@@ -112,7 +112,7 @@ function TaskWidgetCompact({ isLoading, tasks, toggleTask }: TaskWidgetProps) {
   const activeTasks = tasks.filter(t => !t.done).slice(0, 5);
 
   return (
-    <div className="widget">
+    <div className="widget widget-tasks">
       <div className="widget-header">
         <h4>📋 Active Tasks</h4>
         <Link to="/tasks" className="widget-link">View All →</Link>
@@ -124,8 +124,8 @@ function TaskWidgetCompact({ isLoading, tasks, toggleTask }: TaskWidgetProps) {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No active tasks! 🎉</p>
         ) : (
           activeTasks.map(task => (
-            <div key={task.id} className="task-row" onClick={() => toggleTask(task.id, task.done)}>
-              <div className="task-check-sm">{task.done && '✓'}</div>
+            <div key={task.id} className={`task-row ${task.done ? 'done' : ''}`} onClick={() => toggleTask(task.id, !task.done)}>
+              <div className={`task-check-sm ${task.done ? 'checked' : ''}`}>{task.done && '✓'}</div>
               <span className="task-text-sm">{task.text}</span>
               <span className="task-due-sm">{task.due}</span>
               <span className="task-dot" style={{
@@ -200,7 +200,7 @@ function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
     .slice(0, 3);
 
   return (
-    <div className="widget">
+    <div className="widget widget-deadlines">
       <div className="widget-header">
         <h4>⏰ Critical Deadlines</h4>
         <Link to="/tasks" className="widget-link">View All →</Link>
@@ -234,7 +234,7 @@ function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
   const compactGoals = goals.slice(0, 3);
 
   return (
-    <div className="widget">
+    <div className="widget widget-goals">
       <div className="widget-header">
         <h4>🎯 Goals Roadmap</h4>
         <Link to="/goals" className="widget-link">View All →</Link>
@@ -252,7 +252,7 @@ function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
                 <span style={{ color: g.color, fontWeight: 700 }}>{g.progress}%</span>
               </div>
               <div className="goal-bar-sm">
-                <div className="goal-fill-sm" style={{ width: `${g.progress}%`, background: g.color }}></div>
+                <div className="goal-fill-sm" style={{ width: `${g.progress}%`, background: g.color, boxShadow: `0 0 8px ${g.color}` }}></div>
               </div>
             </div>
           ))
@@ -274,7 +274,7 @@ function HabitWidgetCompact({ isLoading, habits, toggleHabitDay, todayIndex }: H
   const daysShort = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   return (
-    <div className="widget" style={{ minWidth: '320px' }}>
+    <div className="widget widget-habits" style={{ minWidth: '320px' }}>
       <div className="widget-header">
         <h4>🔄 Habit Tracker</h4>
         <Link to="/habits" className="widget-link">View All →</Link>

@@ -46,6 +46,7 @@ export default function FocusPage() {
   const [sessionName, setSessionName] = useState('');
   const [sessionNotes, setSessionNotes] = useState('');
   const [selectedSession, setSelectedSession] = useState<FocusSession | null>(null);
+  const [sessionToDelete, setSessionToDelete] = useState<FocusSession | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioPlayersRef = useRef<Record<string, HTMLAudioElement | null>>({});
@@ -127,13 +128,11 @@ export default function FocusPage() {
   };
 
   const deleteSession = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this focus session?')) {
-      const updated = pastSessions.filter(s => s.id !== id);
-      setPastSessions(updated);
-      localStorage.setItem('past_focus_sessions', JSON.stringify(updated));
-      if (selectedSession && selectedSession.id === id) {
-        setSelectedSession(null);
-      }
+    const updated = pastSessions.filter(s => s.id !== id);
+    setPastSessions(updated);
+    localStorage.setItem('past_focus_sessions', JSON.stringify(updated));
+    if (selectedSession && selectedSession.id === id) {
+      setSelectedSession(null);
     }
   };
 
@@ -452,16 +451,6 @@ export default function FocusPage() {
                 </div>
                 <div className="past-session-meta">
                   <span className="past-session-duration">⏱️ {formatDuration(session.duration)}</span>
-                  <button 
-                    className="delete-session-btn" 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      deleteSession(session.id); 
-                    }}
-                    title="Delete Session"
-                  >
-                    🗑️
-                  </button>
                   <span className="past-session-arrow">→</span>
                 </div>
               </div>
@@ -545,7 +534,87 @@ export default function FocusPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary modal-btn" onClick={() => setSelectedSession(null)}>Close</button>
+              <button 
+                className="btn-secondary modal-btn" 
+                onClick={() => {
+                  if (selectedSession) {
+                    setSessionToDelete(selectedSession);
+                    setSelectedSession(null);
+                  }
+                }}
+                style={{
+                  borderColor: 'var(--accent-red)',
+                  color: 'var(--accent-red)',
+                  background: 'rgba(239, 68, 68, 0.05)',
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                Delete Session
+              </button>
+              <button 
+                className="btn-secondary modal-btn" 
+                onClick={() => setSelectedSession(null)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Session Delete Confirmation Modal */}
+      {sessionToDelete && (
+        <div className="focus-modal-overlay" onClick={() => setSessionToDelete(null)}>
+          <div className="focus-modal-content detail-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <button className="modal-close-btn" onClick={() => setSessionToDelete(null)}>✕</button>
+            <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚠️</div>
+            <h3>Delete Focus Session</h3>
+            <p style={{ marginTop: '12px', marginBottom: '24px', fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+              Are you sure you want to delete the focus session <strong>"{sessionToDelete.name}"</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn-secondary modal-btn" 
+                onClick={() => setSessionToDelete(null)}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                className="btn-primary modal-btn" 
+                onClick={() => {
+                  if (sessionToDelete) {
+                    deleteSession(sessionToDelete.id);
+                    setSessionToDelete(null);
+                  }
+                }}
+                style={{ 
+                  backgroundColor: 'var(--accent-red)', 
+                  borderColor: 'var(--accent-red)',
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-md)'
+                }}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

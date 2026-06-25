@@ -452,25 +452,25 @@ export default function AnalyticsPage() {
         <>
           {/* Summary Cards */}
           <div className="analytics-summary">
-            <div className="summary-card widget">
+            <div className="summary-card widget card-focus">
               <div className="summary-icon" style={{ background: 'rgba(59,130,246,0.15)' }}>⏱️</div>
               <div className="summary-value">{totalFocusHours}h</div>
               <div className="summary-label">Focus Time (Est.)</div>
               <div className="summary-change positive">Based on habits completed</div>
             </div>
-            <div className="summary-card widget">
+            <div className="summary-card widget card-tasks">
               <div className="summary-icon" style={{ background: 'rgba(16,185,129,0.15)' }}>✅</div>
               <div className="summary-value">{completedTasksCount}</div>
               <div className="summary-label">Tasks Completed</div>
               <div className="summary-change positive">Out of {tasks.length} total</div>
             </div>
-            <div className="summary-card widget">
+            <div className="summary-card widget card-score">
               <div className="summary-icon" style={{ background: 'rgba(139,92,246,0.15)' }}>📈</div>
               <div className="summary-value">{avgProductivityScore}</div>
               <div className="summary-label">Productivity Score</div>
               <div className="summary-change positive">Tasks + habits average</div>
             </div>
-            <div className="summary-card widget">
+            <div className="summary-card widget card-goals">
               <div className="summary-icon" style={{ background: 'rgba(236,72,153,0.15)' }}>🎯</div>
               <div className="summary-value">{avgGoalProgress}%</div>
               <div className="summary-label">Goal Completion</div>

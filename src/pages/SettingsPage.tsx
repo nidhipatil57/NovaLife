@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { CustomSelect } from '../components/ui/CustomSelect';
 import './SettingsPage.css';
+
+const timezoneOptions = [
+  { label: 'Asia/Kolkata (IST)', value: 'Asia/Kolkata (IST)', icon: '🌐' },
+  { label: 'UTC (GMT)', value: 'UTC (GMT)', icon: '🌐' },
+  { label: 'America/New_York (EST)', value: 'America/New_York (EST)', icon: '🌐' },
+  { label: 'Europe/London (BST)', value: 'Europe/London (BST)', icon: '🌐' },
+  { label: 'Asia/Tokyo (JST)', value: 'Asia/Tokyo (JST)', icon: '🌐' },
+];
 
 const themes = [
   { name: 'Dark', color: '#070B14', accent: '#3B82F6' },
@@ -21,8 +30,51 @@ export default function SettingsPage() {
   const [activeTheme, setActiveTheme] = useState('Dark');
   const [aiMode, setAiMode] = useState('Motivational');
   const [notifications, setNotifications] = useState({ email: true, push: true, desktop: true, sms: false });
+  const [timezone, setTimezone] = useState('Asia/Kolkata (IST)');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [loadingCalendar, setLoadingCalendar] = useState(true);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const res = await fetch('/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGoogleConnected(!!data.user.hasGoogleCalendar);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingCalendar(false);
+      }
+    };
+    fetchStatus();
+  }, []);
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/auth/google/disconnect', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setGoogleConnected(false);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -67,7 +119,11 @@ export default function SettingsPage() {
               </div>
               <div className="form-row">
                 <label>Timezone</label>
-                <select className="settings-input"><option>Asia/Kolkata (IST)</option></select>
+                <CustomSelect
+                  value={timezone}
+                  onChange={setTimezone}
+                  options={timezoneOptions}
+                />
               </div>
             </div>
           </div>
@@ -124,9 +180,20 @@ export default function SettingsPage() {
         <div className="settings-section widget">
           <h4>📅 Calendar Integrations</h4>
           <div className="integration-list">
-            <div className="integration-item connected">
+            <div className={`integration-item ${googleConnected ? 'connected' : ''}`}>
               <span>📅 Google Calendar</span>
-              <span className="int-status connected">Connected</span>
+              {loadingCalendar ? (
+                <span className="int-status" style={{ opacity: 0.5 }}>Checking...</span>
+              ) : googleConnected ? (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span className="int-status connected">Connected</span>
+                  <button className="btn-sm btn-danger" onClick={handleDisconnectGoogle} style={{ padding: '2px 8px', fontSize: '11px' }}>Disconnect</button>
+                </div>
+              ) : (
+                <button className="btn-sm btn-secondary" onClick={() => {
+                  window.location.href = `/api/auth/google/connect?token=${localStorage.getItem('novalife_token')}`;
+                }}>Connect</button>
+              )}
             </div>
             <div className="integration-item">
               <span>📧 Outlook</span>
@@ -162,7 +229,7 @@ export default function SettingsPage() {
             <button className="btn-secondary btn-sm">📥 Export Data</button>
             <button className="btn-secondary btn-sm">🔑 Change Password</button>
             <button className="btn-secondary btn-sm logout-btn" onClick={handleLogout}>🚪 Log Out</button>
-            <button className="btn-secondary btn-sm delete-btn">🗑️ Delete Account</button>
+            <button className="btn-secondary btn-sm delete-btn">Delete Account</button>
           </div>
         </div>
       </div>

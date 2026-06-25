@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
+const { google } = require('googleapis');
 require('dotenv').config();
 
 const app = express();
@@ -40,8 +41,16 @@ pool.connect(async (err, client, release) => {
         await client.query(`
           ALTER TABLE events ADD COLUMN IF NOT EXISTS prep_checklist JSONB DEFAULT '[]';
           ALTER TABLE events ADD COLUMN IF NOT EXISTS week_offset INT DEFAULT 0;
+          ALTER TABLE goals ADD COLUMN IF NOT EXISTS completed_by VARCHAR(50) DEFAULT '';
+          ALTER TABLE goals ADD COLUMN IF NOT EXISTS completed_dates JSONB DEFAULT '[]';
+          ALTER TABLE goals ADD COLUMN IF NOT EXISTS streak INT DEFAULT 0;
+          ALTER TABLE goals ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+          ALTER TABLE goals ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN DEFAULT FALSE;
+          ALTER TABLE habits ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
+          ALTER TABLE events ADD COLUMN IF NOT EXISTS google_event_id VARCHAR(255);
         `);
-        console.log('Database schema initialized/verified and calendar event columns migrated successfully.');
+        console.log('Database schema initialized/verified and calendar/goal columns migrated successfully.');
       } else {
         console.warn('schema.sql file not found, skipping database auto-initialization.');
       }
@@ -52,6 +61,155 @@ pool.connect(async (err, client, release) => {
     }
   }
 });
+
+// Google APIs OAuth configuration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '173999487458-i11ov984fr2anm4fedlsgot4688ri3q5.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'fallback_secret';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/auth/google/callback';
+
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI
+);
+
+// Helper: Get Google Calendar client for a user
+async function getGoogleCalendarClient(userId) {
+  try {
+    const result = await pool.query('SELECT google_refresh_token FROM users WHERE id = $1', [userId]);
+    const refreshToken = result.rows[0]?.google_refresh_token;
+    if (!refreshToken) return null;
+
+    const userOauth = new google.auth.OAuth2(
+      GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET,
+      GOOGLE_REDIRECT_URI
+    );
+    userOauth.setCredentials({ refresh_token: refreshToken });
+    return google.calendar({ version: 'v3', auth: userOauth });
+  } catch (err) {
+    console.error('Error getting Google Calendar Client:', err);
+    return null;
+  }
+}
+
+// Helper: Get event ISO start/end date times (matches Monday-first calculation)
+function getEventDateTime(dayOfWeek, startHour, duration, weekOffset) {
+  const today = new Date();
+  let currentDay = today.getDay();
+  if (currentDay === 0) currentDay = 7;
+  
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - currentDay + 1 + (Number(weekOffset || 0) * 7));
+  
+  const offsetFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const eventDate = new Date(startOfWeek);
+  eventDate.setDate(startOfWeek.getDate() + offsetFromMonday);
+  
+  const startHours = Math.floor(startHour);
+  const startMinutes = Math.round((startHour - startHours) * 60);
+  
+  const startTime = new Date(eventDate);
+  startTime.setHours(startHours, startMinutes, 0, 0);
+  
+  const endTime = new Date(startTime);
+  const totalMinutes = Math.round(duration * 60);
+  endTime.setMinutes(startTime.getMinutes() + totalMinutes);
+  
+  return {
+    start: startTime.toISOString(),
+    end: endTime.toISOString()
+  };
+}
+
+// Sync single event to Google Calendar (Insert or Update)
+async function syncToGoogleCalendar(userId, eventId) {
+  try {
+    const calendar = await getGoogleCalendarClient(userId);
+    if (!calendar) return; // Google Calendar not connected
+
+    // Fetch full event info from DB
+    const eventRes = await pool.query('SELECT * FROM events WHERE id = $1', [eventId]);
+    if (eventRes.rows.length === 0) return;
+    const event = eventRes.rows[0];
+
+    const times = getEventDateTime(
+      event.day_of_week, 
+      parseFloat(event.start_hour), 
+      parseFloat(event.duration), 
+      event.week_offset
+    );
+
+    const resource = {
+      summary: event.title,
+      description: `Synced from NovaLife — Event Type: ${event.event_type}`,
+      start: { dateTime: times.start },
+      end: { dateTime: times.end },
+      colorId: getGoogleColorId(event.color)
+    };
+
+    if (event.google_event_id) {
+      // Update existing
+      try {
+        await calendar.events.update({
+          calendarId: 'primary',
+          eventId: event.google_event_id,
+          requestBody: resource
+        });
+      } catch (updateErr) {
+        // If event was deleted in Google Calendar directly, recreate it
+        if (updateErr.code === 404 || updateErr.code === 410) {
+          const insertRes = await calendar.events.insert({
+            calendarId: 'primary',
+            requestBody: resource
+          });
+          await pool.query('UPDATE events SET google_event_id = $1 WHERE id = $2', [insertRes.data.id, eventId]);
+        } else {
+          throw updateErr;
+        }
+      }
+    } else {
+      // Insert new
+      const insertRes = await calendar.events.insert({
+        calendarId: 'primary',
+        requestBody: resource
+      });
+      await pool.query('UPDATE events SET google_event_id = $1 WHERE id = $2', [insertRes.data.id, eventId]);
+    }
+  } catch (err) {
+    console.error('Error syncing to Google Calendar:', err);
+  }
+}
+
+// Delete event from Google Calendar
+async function deleteFromGoogleCalendar(userId, googleEventId) {
+  if (!googleEventId) return;
+  try {
+    const calendar = await getGoogleCalendarClient(userId);
+    if (!calendar) return;
+
+    await calendar.events.delete({
+      calendarId: 'primary',
+      eventId: googleEventId
+    });
+  } catch (err) {
+    if (err.code !== 404 && err.code !== 410) {
+      console.error('Error deleting from Google Calendar:', err);
+    }
+  }
+}
+
+// Map theme colors to Google Calendar colorIds (1 to 11)
+function getGoogleColorId(color) {
+  if (!color) return '1';
+  const c = color.toLowerCase();
+  if (c.includes('red') || c.includes('accent-red')) return '11'; 
+  if (c.includes('orange') || c.includes('accent-orange')) return '6'; 
+  if (c.includes('green') || c.includes('accent-green')) return '10'; 
+  if (c.includes('cyan') || c.includes('accent-cyan')) return '7'; 
+  if (c.includes('purple') || c.includes('accent-purple')) return '3'; 
+  return '1'; 
+}
 
 // Middleware: Authenticate JWT Token
 const authenticateToken = (req, res, next) => {
@@ -223,10 +381,80 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
+// Google Calendar Connection Endpoint (initiates OAuth consent screen redirect)
+app.get('/api/auth/google/connect', (req, res) => {
+  const token = req.query.token;
+  if (!token) {
+    return res.status(401).send('Access token required.');
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret', (err, decoded) => {
+    if (err) {
+      return res.status(403).send('Invalid or expired token.');
+    }
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: ['https://www.googleapis.com/auth/calendar'],
+      prompt: 'consent',
+      state: String(decoded.id)
+    });
+
+    res.redirect(authUrl);
+  });
+});
+
+// Google OAuth callback endpoint
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code, state } = req.query; // state is our userId
+  if (!code || !state) {
+    return res.redirect('http://localhost:5173/settings?calendar_error=missing_params');
+  }
+
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    const refreshToken = tokens.refresh_token;
+
+    if (refreshToken) {
+      await pool.query('UPDATE users SET google_refresh_token = $1 WHERE id = $2', [refreshToken, Number(state)]);
+      res.redirect('http://localhost:5173/settings?calendar_connected=true');
+    } else {
+      // Check if we already have a refresh token saved
+      const userCheck = await pool.query('SELECT google_refresh_token FROM users WHERE id = $1', [Number(state)]);
+      if (userCheck.rows.length > 0 && userCheck.rows[0].google_refresh_token) {
+        res.redirect('http://localhost:5173/settings?calendar_connected=true');
+      } else {
+        // Force consent to get refresh token
+        const forceUrl = oauth2Client.generateAuthUrl({
+          access_type: 'offline',
+          scope: ['https://www.googleapis.com/auth/calendar'],
+          prompt: 'consent',
+          state: String(state)
+        });
+        res.redirect(forceUrl);
+      }
+    }
+  } catch (err) {
+    console.error('Google Callback Error:', err);
+    res.redirect('http://localhost:5173/settings?calendar_error=oauth_failed');
+  }
+});
+
+// Google Calendar Disconnect Endpoint
+app.post('/api/auth/google/disconnect', authenticateToken, async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET google_refresh_token = NULL WHERE id = $1', [req.user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Google Disconnect Error:', err);
+    res.status(500).json({ error: 'Failed to disconnect Google Calendar.' });
+  }
+});
+
 // Get Current Logged-in User Profile
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [req.user.id]);
+    const result = await pool.query('SELECT id, name, email, google_refresh_token FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -237,6 +465,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         uid: String(user.id),
         email: user.email,
         displayName: user.name,
+        hasGoogleCalendar: !!user.google_refresh_token
       },
     });
   } catch (err) {
@@ -370,11 +599,11 @@ app.get('/api/habits', authenticateToken, async (req, res) => {
 
 // Add Habit
 app.post('/api/habits', authenticateToken, async (req, res) => {
-  const { name, target, streak, best, rate, week, color } = req.body;
+  const { name, target, streak, best, rate, week, color, notes } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO habits (user_id, name, target, streak, best, rate, week, color) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO habits (user_id, name, target, streak, best, rate, week, color, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.user.id,
         name,
@@ -384,6 +613,7 @@ app.post('/api/habits', authenticateToken, async (req, res) => {
         rate || 0,
         JSON.stringify(week || [false, false, false, false, false, false, false]),
         color || 'var(--accent-blue)',
+        notes || '',
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -396,7 +626,7 @@ app.post('/api/habits', authenticateToken, async (req, res) => {
 // Update Habit
 app.put('/api/habits/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, target, streak, best, rate, week, color } = req.body;
+  const { name, target, streak, best, rate, week, color, notes } = req.body;
 
   try {
     const result = await pool.query(
@@ -407,7 +637,8 @@ app.put('/api/habits/:id', authenticateToken, async (req, res) => {
            best = COALESCE($6, best),
            rate = COALESCE($7, rate),
            week = COALESCE($8, week),
-           color = COALESCE($9, color)
+           color = COALESCE($9, color),
+           notes = COALESCE($10, notes)
        WHERE user_id = $1 AND id = $2 RETURNING *`,
       [
         req.user.id,
@@ -419,6 +650,7 @@ app.put('/api/habits/:id', authenticateToken, async (req, res) => {
         rate,
         week ? JSON.stringify(week) : null,
         color,
+        notes,
       ]
     );
 
@@ -468,11 +700,11 @@ app.get('/api/goals', authenticateToken, async (req, res) => {
 
 // Add Goal
 app.post('/api/goals', authenticateToken, async (req, res) => {
-  const { name, category, progress, color, milestones } = req.body;
+  const { name, category, progress, color, milestones, completed_by, notes, ai_generated } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO goals (user_id, name, category, progress, color, milestones) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO goals (user_id, name, category, progress, color, milestones, completed_by, notes, ai_generated) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.user.id,
         name,
@@ -480,6 +712,9 @@ app.post('/api/goals', authenticateToken, async (req, res) => {
         progress || 0,
         color || 'var(--accent-blue)',
         JSON.stringify(milestones || []),
+        completed_by || '',
+        notes || '',
+        ai_generated !== undefined ? ai_generated : false,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -492,7 +727,7 @@ app.post('/api/goals', authenticateToken, async (req, res) => {
 // Update Goal
 app.put('/api/goals/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, category, progress, color, milestones } = req.body;
+  const { name, category, progress, color, milestones, completed_by, completed_dates, streak, notes, ai_generated } = req.body;
 
   try {
     const result = await pool.query(
@@ -501,16 +736,26 @@ app.put('/api/goals/:id', authenticateToken, async (req, res) => {
            category = COALESCE($4, category),
            progress = COALESCE($5, progress),
            color = COALESCE($6, color),
-           milestones = COALESCE($7, milestones)
+           milestones = COALESCE($7, milestones),
+           completed_by = COALESCE($8, completed_by),
+           completed_dates = COALESCE($9, completed_dates),
+           streak = COALESCE($10, streak),
+           notes = COALESCE($11, notes),
+           ai_generated = COALESCE($12, ai_generated)
        WHERE user_id = $1 AND id = $2 RETURNING *`,
       [
         req.user.id,
         id,
-        name,
-        category,
-        progress,
-        color,
-        milestones ? JSON.stringify(milestones) : null,
+        name !== undefined ? name : null,
+        category !== undefined ? category : null,
+        progress !== undefined ? progress : null,
+        color !== undefined ? color : null,
+        milestones !== undefined ? (milestones ? JSON.stringify(milestones) : null) : null,
+        completed_by !== undefined ? completed_by : null,
+        completed_dates !== undefined ? (completed_dates ? JSON.stringify(completed_dates) : null) : null,
+        streak !== undefined ? streak : null,
+        notes !== undefined ? notes : null,
+        ai_generated !== undefined ? ai_generated : null,
       ]
     );
 
@@ -605,6 +850,9 @@ app.post('/api/events', authenticateToken, async (req, res) => {
     };
 
     res.status(201).json(formattedEvent);
+    
+    // Sync with Google Calendar in background
+    syncToGoogleCalendar(req.user.id, row.id);
   } catch (err) {
     console.error('Error adding event:', err);
     res.status(500).json({ error: 'Error creating event.' });
@@ -660,6 +908,9 @@ app.put('/api/events/:id', authenticateToken, async (req, res) => {
     };
 
     res.json(formatted);
+    
+    // Sync with Google Calendar in background
+    syncToGoogleCalendar(req.user.id, row.id);
   } catch (err) {
     console.error('Error updating event:', err);
     res.status(500).json({ error: 'Error updating event.' });
@@ -679,7 +930,13 @@ app.delete('/api/events/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Event not found or unauthorized.' });
     }
 
+    const row = result.rows[0];
     res.json({ message: 'Event deleted successfully.' });
+
+    // Delete from Google Calendar in background
+    if (row && row.google_event_id) {
+      deleteFromGoogleCalendar(req.user.id, row.google_event_id);
+    }
   } catch (err) {
     console.error('Error deleting event:', err);
     res.status(500).json({ error: 'Error deleting event.' });
