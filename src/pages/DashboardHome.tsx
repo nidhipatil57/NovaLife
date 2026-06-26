@@ -1,8 +1,17 @@
 import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useHabits } from '../hooks/useHabits';
 import { useGoals } from '../hooks/useGoals';
+import { useDataContext } from '../context/DataContext';
+import { parseTaskDueDate } from '../utils/dateParser';
 import './DashboardHome.css';
+
+const isOverdue = (task: any) => {
+  if (task.done) return false;
+  const dueDate = parseTaskDueDate(task.due);
+  return dueDate !== null && dueDate.getTime() < Date.now();
+};
 
 export default function DashboardHome() {
   const hour = new Date().getHours();
@@ -11,24 +20,31 @@ export default function DashboardHome() {
   const { tasks, loading: tasksLoading, toggleTask, user } = useTasks();
   const { habits, loading: habitsLoading, toggleHabitDay } = useHabits();
   const { goals, loading: goalsLoading } = useGoals();
+  const { productivityScore, focusSessions } = useDataContext();
 
   const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
+
+  const todayFocusHours = useMemo(() => {
+    const todayStr = new Date().toDateString();
+    const todaySessions = focusSessions.filter(s => {
+      const d = new Date(s.created_at || s.createdAt || new Date());
+      return d.toDateString() === todayStr;
+    });
+    const totalSeconds = todaySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
+    return Math.round((totalSeconds / 3600) * 10) / 10;
+  }, [focusSessions]);
 
   // Calculations for daily briefing
   const activeTasks = tasks.filter(t => !t.done);
   const highPriorityCount = activeTasks.filter(t => t.priority === 'critical' || t.priority === 'high').length;
-  const atRiskCount = activeTasks.filter(t => t.due && t.due.toLowerCase().trim() !== 'no due date').length;
+  
+  const overdueCount = activeTasks.filter(t => isOverdue(t)).length;
+  const approachingCount = activeTasks.filter(t => t.due && t.due.toLowerCase().trim() !== 'no due date' && !isOverdue(t)).length;
 
   const totalTasksCount = tasks.length;
-  const completedTasksCount = tasks.filter(t => t.done).length;
-  const taskScore = totalTasksCount > 0 ? (completedTasksCount / totalTasksCount) * 100 : 100;
-
-  const habitScore = habits.length > 0 ? habits.reduce((acc, h) => acc + h.rate, 0) / habits.length : 100;
-  
-  // Overall dynamic productivity score
-  const productivityScore = habits.length === 0 && tasks.length === 0 
-    ? 0 
-    : Math.round((taskScore + habitScore) / 2);
+  const maxStreak = useMemo(() => {
+    return habits.length > 0 ? Math.max(...habits.map(h => h.streak || 0), 0) : 0;
+  }, [habits]);
 
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'User';
 
@@ -59,8 +75,9 @@ export default function DashboardHome() {
             </p>
           ) : (
             <p className="briefing-summary">
-              You have <strong style={{ color: 'var(--accent-red-light)' }}>{highPriorityCount} high-priority tasks</strong> and{' '}
-              <strong style={{ color: 'var(--accent-orange-light)' }}>{atRiskCount} deadline{atRiskCount !== 1 ? 's' : ''} approaching</strong>.
+              You have <strong style={{ color: 'var(--accent-red-light)' }}>{highPriorityCount} active high-priority task{highPriorityCount !== 1 ? 's' : ''}</strong>,{' '}
+              <strong style={{ color: 'var(--accent-red)' }}>{overdueCount} task{overdueCount !== 1 ? 's' : ''} overdue</strong>, and{' '}
+              <strong style={{ color: 'var(--accent-orange-light)' }}>{approachingCount} deadline{approachingCount !== 1 ? 's' : ''} approaching</strong>.
             </p>
           )}
           <div className="briefing-stats">
@@ -88,16 +105,22 @@ export default function DashboardHome() {
         </div>
       </div>
 
-
       {/* Widget Grid */}
       <div className="dash-grid">
         <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} toggleTask={toggleTask} />
-        <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={2.5} streak={8} />
+        <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={todayFocusHours} streak={maxStreak} />
         <DeadlineWidgetCompact tasks={tasks} />
         <GoalWidgetCompact isLoading={goalsLoading} goals={goals} />
         <HabitWidgetCompact isLoading={habitsLoading} habits={habits} toggleHabitDay={toggleHabitDay} todayIndex={todayIndex} />
         <AISuggestionsWidget activeTasks={activeTasks} />
       </div>
+
+      <AchievementsCelebrationWidget 
+        tasks={tasks} 
+        goals={goals} 
+        habits={habits} 
+        focusSessions={focusSessions} 
+      />
     </div>
   );
 }
@@ -195,9 +218,26 @@ function ScoreWidget({ score, totalTasks, focusHours, streak }: ScoreWidgetProps
 }
 
 function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
-  const deadlines = tasks
-    .filter(t => !t.done && (t.priority === 'critical' || t.priority === 'high'))
+  const overdueTasks = tasks
+    .filter(t => !t.done && isOverdue(t))
+    .sort((a, b) => {
+      const aDate = parseTaskDueDate(a.due);
+      const bDate = parseTaskDueDate(b.due);
+      if (aDate && bDate) return aDate.getTime() - bDate.getTime();
+      return 0;
+    });
+
+  const upcomingUrgent = tasks
+    .filter(t => !t.done && !isOverdue(t) && (t.priority === 'critical' || t.priority === 'high'))
+    .sort((a, b) => {
+      const aDate = parseTaskDueDate(a.due);
+      const bDate = parseTaskDueDate(b.due);
+      if (aDate && bDate) return aDate.getTime() - bDate.getTime();
+      return 0;
+    })
     .slice(0, 3);
+
+  const deadlines = [...overdueTasks, ...upcomingUrgent];
 
   return (
     <div className="widget widget-deadlines">
@@ -210,16 +250,19 @@ function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No urgent deadlines! 😎</p>
         ) : (
           deadlines.map((d, i) => (
-            <div key={i} className={`deadline-row urgency-${d.priority === 'critical' ? 'critical' : 'high'}`}>
+            <div key={i} className={`deadline-row urgency-${isOverdue(d) || d.priority === 'critical' ? 'critical' : 'high'}`}>
               <div className="dl-indicator"></div>
               <div className="dl-info">
                 <span className="dl-task">{d.text}</span>
-                <span className="dl-due">{d.due}</span>
+                <span className="dl-due" style={isOverdue(d) ? { color: 'var(--accent-red)', fontWeight: 'bold' } : {}}>
+                  {isOverdue(d) ? '⚠️ Overdue! ' : ''}{d.due}
+                </span>
               </div>
-              {d.priority === 'critical' && <span className="dl-badge">🚨</span>}
+              {(d.priority === 'critical' || isOverdue(d)) && <span className="dl-badge">🚨</span>}
             </div>
           ))
         )}
+
       </div>
     </div>
   );
@@ -231,7 +274,7 @@ interface GoalWidgetProps {
 }
 
 function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
-  const compactGoals = goals.slice(0, 3);
+  const compactGoals = goals.filter(g => g.progress < 100).slice(0, 3);
 
   return (
     <div className="widget widget-goals">
@@ -363,12 +406,171 @@ function AISuggestionsWidget({ activeTasks }: { activeTasks: any[] }) {
         </div>
 
         <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
-          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+          <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
             <span className="ai-suggestion-icon">🧘</span>
             <span>Habit Stacking Tip</span>
           </div>
           <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>Complete a quick 5-min stretch right after a Pomodoro break to build physical resilience.</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface AchievementsCelebrationWidgetProps {
+  tasks: any[];
+  goals: any[];
+  habits: any[];
+  focusSessions: any[];
+}
+
+function AchievementsCelebrationWidget({ tasks, goals, habits, focusSessions }: AchievementsCelebrationWidgetProps) {
+  const isWithinLastDays = (dateStr: string | Date | undefined, days: number) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const diffMs = Date.now() - d.getTime();
+    return diffMs >= 0 && diffMs <= days * 24 * 60 * 60 * 1000;
+  };
+
+  const completedTasksThisWeek = tasks.filter(t => {
+    if (!t.done) return false;
+    const completedLog = t.activityLog?.find((log: any) => log.action.toLowerCase().includes('completed'));
+    const completedDate = completedLog ? completedLog.timestamp : t.createdAt;
+    return isWithinLastDays(completedDate, 7);
+  });
+
+  const completedGoalsThisWeek = goals.filter(g => {
+    if (g.progress < 100) return false;
+    const completedTime = g.completed_by ? new Date(g.completed_by).getTime() : NaN;
+    if (!isNaN(completedTime)) {
+      return isWithinLastDays(g.completed_by, 7);
+    }
+    return isWithinLastDays(g.created_at, 7);
+  });
+
+  const weeklyFocusSessions = focusSessions.filter(s => 
+    isWithinLastDays(s.created_at || s.createdAt, 7)
+  );
+
+  const totalWeeklyFocusMinutes = Math.round(
+    weeklyFocusSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60
+  );
+
+  const longestFocusSession = weeklyFocusSessions.length > 0
+    ? Math.max(...weeklyFocusSessions.map(s => Math.round((s.duration || 0) / 60)))
+    : 0;
+
+  const topHabits = habits
+    .filter(h => h.streak > 0)
+    .sort((a, b) => b.streak - a.streak)
+    .slice(0, 3);
+
+  const totalAchievements = completedTasksThisWeek.length + completedGoalsThisWeek.length + topHabits.length + (totalWeeklyFocusMinutes > 0 ? 1 : 0);
+
+  if (totalAchievements === 0) {
+    return (
+      <div className="achievements-celebration widget glass-card-static empty-achievements">
+        <div className="celebration-header">
+          <h3>✨ What you achieved this week? ✨</h3>
+          <p className="subtitle">Your weekly wins are waiting to happen!</p>
+        </div>
+        <div className="celebration-body-empty">
+          <span className="celebration-icon-empty">🌱</span>
+          <p>Every small step counts towards your larger goals. Complete tasks, log focus sessions, and maintain your habits to light up this space with celebration! 🚀</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="achievements-celebration widget glass-card-static">
+      <div className="celebration-header">
+        <h3>✨ What you achieved this week? ✨</h3>
+        <p className="subtitle">Outstanding momentum! Be proud of your progress and hard work.</p>
+      </div>
+
+      <div className="achievements-grid">
+        {/* Tasks Completed Card */}
+        {completedTasksThisWeek.length > 0 && (
+          <div className="achievement-card tasks-card">
+            <div className="ach-icon">🏆</div>
+            <div className="ach-info">
+              <span className="ach-value">{completedTasksThisWeek.length} Task{completedTasksThisWeek.length > 1 ? 's' : ''} Completed</span>
+              <span className="ach-label">Great execution this week</span>
+              <div className="ach-list">
+                {completedTasksThisWeek.slice(0, 3).map((t, idx) => (
+                  <div key={idx} className="ach-list-item">✓ {t.text}</div>
+                ))}
+                {completedTasksThisWeek.length > 3 && <div className="ach-more">And {completedTasksThisWeek.length - 3} more...</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Goals Completed Card */}
+        {completedGoalsThisWeek.length > 0 && (
+          <div className="achievement-card goals-card">
+            <div className="ach-icon">🎯</div>
+            <div className="ach-info">
+              <span className="ach-value">{completedGoalsThisWeek.length} Goal{completedGoalsThisWeek.length > 1 ? 's' : ''} Reached!</span>
+              <span className="ach-label">Big milestones unlocked 🌟</span>
+              <div className="ach-list">
+                {completedGoalsThisWeek.map((g, idx) => (
+                  <div key={idx} className="ach-list-item" style={{ color: g.color }}>🌟 {g.name}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Focus Sprint Card */}
+        {totalWeeklyFocusMinutes > 0 && (
+          <div className="achievement-card focus-card">
+            <div className="ach-icon">⏱️</div>
+            <div className="ach-info">
+              <span className="ach-value">
+                {totalWeeklyFocusMinutes >= 60 
+                  ? `${Math.round(totalWeeklyFocusMinutes / 60 * 10) / 10}h Focus Time` 
+                  : `${totalWeeklyFocusMinutes}m Focus Time`
+                }
+              </span>
+              <span className="ach-label">Deep work sprints completed</span>
+              {longestFocusSession > 0 && (
+                <div className="ach-detail" style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  🚀 Longest session: <strong>{longestFocusSession} mins</strong> of uninterrupted concentration.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Habits Consistency Card */}
+        {topHabits.length > 0 && (
+          <div className="achievement-card habits-card">
+            <div className="ach-icon">🔥</div>
+            <div className="ach-info">
+              <span className="ach-value">Habit Streaks On Fire</span>
+              <span className="ach-label">Consistency is your superpower</span>
+              <div className="ach-list">
+                {topHabits.map((h, idx) => (
+                  <div key={idx} className="ach-list-item" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                    <span>🔄 {h.name}</span>
+                    <strong style={{ color: h.color }}>{h.streak} day streak</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="celebration-footer">
+        <p className="celebration-encouragement">
+          {totalAchievements >= 4 
+            ? "🔥 Absolutely incredible! You're operating at a legendary level. Celebrate your wins and rest well!" 
+            : "✨ Brilliant work! Each achievement is a building block for your future. Keep moving forward!"
+          }
+        </p>
       </div>
     </div>
   );

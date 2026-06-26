@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useHabits } from '../hooks/useHabits';
 import { useGoals } from '../hooks/useGoals';
+import { useDataContext } from '../context/DataContext';
+import { calculateProductivityScore } from '../utils/productivityEngine';
 import './AnalyticsPage.css';
 
 const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -10,6 +12,7 @@ export default function AnalyticsPage() {
   const { tasks, loading: tasksLoading, user } = useTasks();
   const { habits, loading: habitsLoading } = useHabits();
   const { goals, loading: goalsLoading } = useGoals();
+  const { focusSessions, events, rescueActivations, productivityScore } = useDataContext();
 
   const isLoading = tasksLoading || habitsLoading || goalsLoading;
 
@@ -17,27 +20,79 @@ export default function AnalyticsPage() {
   const [showShareDropdown, setShowShareDropdown] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // 1. Calculate dynamic weeklyData
-  const weeklyData = daysOfWeek.map((day, index) => {
-    const habitsCompleted = habits.filter(h => h.week[index]).length;
-    const habitsTotal = habits.length;
-    const habitRate = habitsTotal > 0 ? (habitsCompleted / habitsTotal) : 0;
-    const focusHours = Math.round(habitsCompleted * 1.5 * 10) / 10;
+  // Get date for each weekday of the current week (Monday-first)
+  const weekDates = useMemo(() => {
+    const today = new Date();
+    let currentDay = today.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    if (currentDay === 0) currentDay = 7; // Map Sun to 7 so Mon is 1
+    
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - currentDay + 1);
+    
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d.toDateString();
+    });
+  }, []);
 
-    const completedTasksCount = tasks.filter(t => t.done).length;
-    const dayMultiplier = index === 1 || index === 3 ? 2 : index === 5 || index === 6 ? 0.5 : 1;
-    const tasksCompletedOnDay = completedTasksCount > 0
-      ? Math.min(completedTasksCount, Math.round((completedTasksCount / 7) * dayMultiplier))
-      : 0;
+  // 1. Calculate dynamic weeklyData using actual focus sessions
+  const weeklyData = useMemo(() => {
+    return daysOfWeek.map((day, index) => {
+      const targetDateStr = weekDates[index];
+      const daySessions = focusSessions.filter(s => {
+        const d = new Date(s.created_at || s.createdAt || new Date());
+        return d.toDateString() === targetDateStr;
+      });
+      const totalSeconds = daySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
+      const focusHours = Math.round((totalSeconds / 3600) * 10) / 10; // in hours
 
-    const totalTasksCount = tasks.length;
-    const taskCompletionRate = totalTasksCount > 0 ? (completedTasksCount / totalTasksCount) : 1;
-    const dailyScore = habitsTotal === 0 && totalTasksCount === 0
-      ? 0
-      : Math.round(((taskCompletionRate + habitRate) / 2) * 100);
+      const tasksCompletedOnDay = tasks.filter(t => {
+        if (!t.done) return false;
+        
+        const completionLogs = t.activityLog
+          ? t.activityLog.filter(log => log.action.toLowerCase().includes('marked as completed'))
+          : [];
+        
+        if (completionLogs.length > 0) {
+          const lastLog = completionLogs[completionLogs.length - 1];
+          const logDate = new Date(lastLog.timestamp);
+          return logDate.toDateString() === targetDateStr;
+        }
+        
+        if (t.createdAt) {
+          const createdDate = new Date(t.createdAt);
+          return createdDate.toDateString() === targetDateStr;
+        }
+        
+        return false;
+      }).length;
 
-    return { day, focus: focusHours, tasks: tasksCompletedOnDay, score: dailyScore };
-  });
+      const targetDate = new Date(targetDateStr);
+      const dailyScore = calculateProductivityScore(
+        tasks,
+        habits,
+        goals,
+        focusSessions,
+        events,
+        rescueActivations,
+        targetDate
+      );
+
+      return { day, focus: focusHours, tasks: tasksCompletedOnDay, score: dailyScore };
+    });
+  }, [focusSessions, tasks, habits, goals, events, rescueActivations, weekDates]);
+
+  // Calculate today's actual focus hours (instead of weekly estimate) for the summary card
+  const todayFocusHours = useMemo(() => {
+    const todayStr = new Date().toDateString();
+    const todaySessions = focusSessions.filter(s => {
+      const d = new Date(s.created_at || s.createdAt || new Date());
+      return d.toDateString() === todayStr;
+    });
+    const totalSeconds = todaySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
+    return Math.round((totalSeconds / 3600) * 10) / 10;
+  }, [focusSessions]);
 
   // 2. Summary stats
   const totalFocusHours = Math.round(weeklyData.reduce((acc, d) => acc + d.focus, 0) * 10) / 10;
@@ -204,11 +259,11 @@ export default function AnalyticsPage() {
     ctx.font = 'bold 20px sans-serif';
     
     let ratingStr = 'Growing';
-    if (avgProductivityScore >= 80) ratingStr = 'Legendary';
-    else if (avgProductivityScore >= 65) ratingStr = 'Optimal';
-    else if (avgProductivityScore >= 45) ratingStr = 'Good';
+    if (productivityScore >= 80) ratingStr = 'Legendary';
+    else if (productivityScore >= 65) ratingStr = 'Optimal';
+    else if (productivityScore >= 45) ratingStr = 'Good';
 
-    ctx.fillText(`${avgProductivityScore} / 100 (${ratingStr})`, cardX + 50, y3 + 52);
+    ctx.fillText(`${productivityScore} / 100 (${ratingStr})`, cardX + 50, y3 + 52);
 
     // Card 4: Goal Progress
     const y4 = 395;
@@ -454,9 +509,9 @@ export default function AnalyticsPage() {
           <div className="analytics-summary">
             <div className="summary-card widget card-focus">
               <div className="summary-icon" style={{ background: 'rgba(59,130,246,0.15)' }}>⏱️</div>
-              <div className="summary-value">{totalFocusHours}h</div>
-              <div className="summary-label">Focus Time (Est.)</div>
-              <div className="summary-change positive">Based on habits completed</div>
+              <div className="summary-value">{todayFocusHours}h</div>
+              <div className="summary-label">Today's Focus Time</div>
+              <div className="summary-change positive">From active focus sessions</div>
             </div>
             <div className="summary-card widget card-tasks">
               <div className="summary-icon" style={{ background: 'rgba(16,185,129,0.15)' }}>✅</div>
@@ -466,9 +521,9 @@ export default function AnalyticsPage() {
             </div>
             <div className="summary-card widget card-score">
               <div className="summary-icon" style={{ background: 'rgba(139,92,246,0.15)' }}>📈</div>
-              <div className="summary-value">{avgProductivityScore}</div>
+              <div className="summary-value">{productivityScore}</div>
               <div className="summary-label">Productivity Score</div>
-              <div className="summary-change positive">Tasks + habits average</div>
+              <div className="summary-change positive">Central scoring engine</div>
             </div>
             <div className="summary-card widget card-goals">
               <div className="summary-icon" style={{ background: 'rgba(236,72,153,0.15)' }}>🎯</div>

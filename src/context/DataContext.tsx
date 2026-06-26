@@ -5,6 +5,7 @@ import { type Habit } from '../hooks/useHabits';
 import { type Goal } from '../hooks/useGoals';
 import { type CalendarEvent } from '../hooks/useCalendarEvents';
 import { parseTaskDueDate } from '../utils/dateParser';
+import { calculateProductivityScore } from '../utils/productivityEngine';
 
 export interface FocusSession {
   id: string;
@@ -34,7 +35,7 @@ interface DataContextType {
   loadingTasks: boolean;
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
   updateTask: (id: string, updates: Partial<Omit<Task, 'id' | 'createdAt'>>) => Promise<Task | undefined>;
-  toggleTask: (id: string, done: boolean) => Promise<void>;
+  toggleTask: (id: string, done: boolean, skipSync?: boolean) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
 
   habits: Habit[];
@@ -47,7 +48,7 @@ interface DataContextType {
   goals: Goal[];
   loadingGoals: boolean;
   addGoal: (goal: Omit<Goal, 'id'>) => Promise<void>;
-  toggleMilestone: (goalId: string, milestoneIndex: number) => Promise<void>;
+  toggleMilestone: (goalId: string, milestoneIndex: number, skipSync?: boolean) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   updateGoal: (id: string, updates: Partial<Goal>) => Promise<boolean>;
 
@@ -77,6 +78,8 @@ interface DataContextType {
 
   // Central Productivity Score
   productivityScore: number;
+  rescueActivations: number;
+  triggerRescueActivation: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -107,6 +110,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Conversations state
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(true);
+
+  // Rescue Mode Activations state
+  const [rescueActivations, setRescueActivations] = useState(() => {
+    return Number(localStorage.getItem('novalife_rescue_mode_activations') || 0);
+  });
+
+  const triggerRescueActivation = () => {
+    setRescueActivations((prev) => {
+      const next = prev + 1;
+      localStorage.setItem('novalife_rescue_mode_activations', String(next));
+      return next;
+    });
+  };
 
   // 1. Fetch Tasks
   useEffect(() => {
@@ -433,7 +449,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleTask = async (id: string, done: boolean) => {
+  const toggleTask = async (id: string, done: boolean, skipSync = false) => {
     if (!user) return;
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -445,6 +461,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       await updateTask(id, { done, activityLog: newActivity });
+
+      if (!skipSync) {
+        // Sync to goal milestones if any milestone matches task text
+        const matchingGoal = goals.find(g => 
+          g.milestones?.some(m => m.text.toLowerCase().trim() === task.text.toLowerCase().trim())
+        );
+        if (matchingGoal) {
+          const milestoneIndex = matchingGoal.milestones.findIndex(m => 
+            m.text.toLowerCase().trim() === task.text.toLowerCase().trim()
+          );
+          if (milestoneIndex !== -1 && matchingGoal.milestones[milestoneIndex].done !== done) {
+            await toggleMilestone(matchingGoal.id, milestoneIndex, true);
+          }
+        }
+      }
     } catch (err) {
       console.error('Error toggling task:', err);
       throw err;
@@ -646,13 +677,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleMilestone = async (goalId: string, milestoneIndex: number) => {
+  const toggleMilestone = async (goalId: string, milestoneIndex: number, skipSync = false) => {
     if (!user) return;
     const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
 
     const newMilestones = [...goal.milestones];
-    newMilestones[milestoneIndex].done = !newMilestones[milestoneIndex].done;
+    const isDone = !newMilestones[milestoneIndex].done;
+    newMilestones[milestoneIndex].done = isDone;
+
+    // Recalculate progress based on newMilestones status
+    const completedCount = newMilestones.filter(m => m.done).length;
+    const progress = Math.round((completedCount / newMilestones.length) * 100);
 
     try {
       const token = localStorage.getItem('novalife_token');
@@ -664,6 +700,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({
           milestones: newMilestones,
+          progress: progress
         }),
       });
 
@@ -671,10 +708,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setGoals((prev) =>
           prev.map((g) =>
             g.id === goalId
-              ? { ...g, milestones: newMilestones }
+              ? { ...g, milestones: newMilestones, progress: progress }
               : g
           )
         );
+
+        if (!skipSync) {
+          // Update matching task if one exists
+          const milestoneText = newMilestones[milestoneIndex].text;
+          const matchingTask = tasks.find(t => 
+            t.text.toLowerCase().trim() === milestoneText.toLowerCase().trim()
+          );
+          if (matchingTask && matchingTask.done !== isDone) {
+            await toggleTask(matchingTask.id, isDone, true);
+          }
+        }
       }
     } catch (err) {
       console.error('Error toggling milestone:', err);
@@ -960,80 +1008,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return undefined;
   };
 
-  // Central Productivity Score Engine
+  // Central Productivity Scoring Engine (recalculates automatically on any activity update)
   const productivityScore = useMemo(() => {
-    let score = 50; // Base score
-
-    // 1. Tasks Adherence (Weight: 35)
-    if (tasks.length > 0) {
-      tasks.forEach((t) => {
-        if (t.done) {
-          score += 10;
-          if (t.priority === 'high' || t.priority === 'critical') {
-            score += 5; // Extra bonus for critical work completion
-          }
-        } else {
-          // Check if task is overdue
-          const dueDate = parseTaskDueDate(t.due);
-          if (dueDate && dueDate.getTime() < Date.now()) {
-            score -= 15; // Major penalty for past deadlines
-          }
-        }
-      });
-    }
-
-    // 2. Goal Progress & Milestones (Weight: 20)
-    goals.forEach((g) => {
-      let milestonesDone = 0;
-      if (g.milestones && g.milestones.length > 0) {
-        g.milestones.forEach((m: any) => {
-          if (m.done) {
-            score += 8;
-            milestonesDone++;
-          }
-        });
-        if (milestonesDone === g.milestones.length) {
-          score += 25; // Massive goal achievement bonus
-        }
-      } else if (g.progress === 100) {
-        score += 25;
-      }
-    });
-
-    // 3. Habit Completion & Streaks (Weight: 20)
-    if (habits.length > 0) {
-      const avgRate = habits.reduce((acc, h) => acc + (h.rate || 0), 0) / habits.length;
-      score += Math.min(20, avgRate * 0.2); // Up to +20 for habit rates
-
-      const maxStreak = Math.max(...habits.map((h) => h.streak || 0), 0);
-      score += Math.min(20, maxStreak * 2); // +2 per streak day, max 20
-
-      if (maxStreak >= 30) {
-        score += 30; // Legendary 30-day streak bonus!
-      }
-    }
-
-    // 4. Focus Session Completion (Weight: 15)
-    if (focusSessions.length > 0) {
-      score += focusSessions.length * 5; // +5 points per session completed
-      const totalMinutes = focusSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60;
-      score += Math.min(25, totalMinutes * 0.2); // +0.2 points per focus minute, max +25
-    }
-
-    // 5. Calendar Event Checklist Adherence (Weight: 10)
-    events.forEach((e) => {
-      if (e.prepChecklist && e.prepChecklist.length > 0) {
-        e.prepChecklist.forEach((item) => {
-          if (item.done) {
-            score += 5; // Checklist item completed
-          }
-        });
-      }
-    });
-
-    // Clamp score between 0 and 100
-    return Math.max(0, Math.min(100, Math.round(score)));
-  }, [tasks, habits, goals, focusSessions, events]);
+    return calculateProductivityScore(tasks, habits, goals, focusSessions, events, rescueActivations);
+  }, [tasks, habits, goals, focusSessions, events, rescueActivations]);
 
   return (
     <DataContext.Provider
@@ -1073,6 +1051,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         getMessages,
         addMessage,
         productivityScore,
+        rescueActivations,
+        triggerRescueActivation,
       }}
     >
       {children}

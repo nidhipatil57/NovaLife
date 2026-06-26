@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTasks, type Task } from '../hooks/useTasks';
+import { parseTaskDueDate } from '../utils/dateParser';
+import { useDataContext } from '../context/DataContext';
 import './TasksPage.css';
+
+const isOverdue = (task: Task) => {
+  if (task.done) return false;
+  const dueDate = parseTaskDueDate(task.due);
+  return dueDate !== null && dueDate.getTime() < Date.now();
+};
 
 const priorityConfig = {
   critical: { label: '🔥 Critical', color: 'var(--accent-red)', bg: 'rgba(239,68,68,0.1)' },
@@ -122,6 +130,7 @@ function CustomSelect({
 
 export default function TasksPage() {
   const { tasks, loading, user, addTask, toggleTask, deleteTask, updateTask } = useTasks();
+  const { addFocusSession } = useDataContext();
   
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
@@ -782,6 +791,13 @@ export default function TasksPage() {
     ];
 
     try {
+      const totalSeconds = (timerMinutes * 60) + timerSeconds;
+      await addFocusSession({
+        name: `Task: ${activeTask.text}`,
+        notes: studySessionName.trim(),
+        duration: totalSeconds
+      });
+
       await updateTask(activeTask.id, {
         sessionsCount: newSessionsCount,
         activityLog: newActivity
@@ -1016,7 +1032,9 @@ export default function TasksPage() {
                         {task.risk && task.risk > 70 && <span className="kanban-risk">🚨 {task.risk}%</span>}
                       </div>
                       <p className="kanban-task-text">{task.text}</p>
-                      <span className="kanban-due">{task.due}</span>
+                      <span className={`kanban-due ${isOverdue(task) ? 'overdue' : ''}`} style={isOverdue(task) ? { color: 'var(--accent-red)', fontWeight: 'bold' } : {}}>
+                        {isOverdue(task) ? '⚠️ Overdue! ' : ''}{task.due}
+                      </span>
                       {task.aiGenerated && <span className="ai-badge-sm">🤖 AI</span>}
                     </div>
                   );
@@ -1055,8 +1073,8 @@ export default function TasksPage() {
                 <h4 className="card-task-title">{task.text}</h4>
 
                 <div className="card-meta-metrics">
-                  <div className="meta-metric due-date-metric">
-                    📅 {task.due}
+                  <div className="meta-metric due-date-metric" style={isOverdue(task) ? { borderColor: 'rgba(239, 68, 68, 0.4)', color: 'var(--accent-red)' } : {}}>
+                    {isOverdue(task) ? '⚠️ Overdue! ' : '📅 '} {task.due}
                   </div>
                 </div>
 
@@ -1593,8 +1611,8 @@ export default function TasksPage() {
                         className="inline-editor-text-input"
                       />
                     ) : (
-                      <span className="field-value due-val">
-                        📅 {activeTask.due}
+                      <span className="field-value due-val" style={isOverdue(activeTask) ? { color: 'var(--accent-red)', fontWeight: 'bold' } : {}}>
+                        {isOverdue(activeTask) ? '⚠️ Overdue! ' : '📅 '} {activeTask.due}
                       </span>
                     )}
                   </div>

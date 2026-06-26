@@ -8,7 +8,7 @@ import './RescueModePage.css';
 
 export default function RescueModePage() {
   const { user } = useAuth();
-  const { tasks, loadingTasks, events, focusSessions } = useDataContext();
+  const { tasks, loadingTasks, events, focusSessions, triggerRescueActivation } = useDataContext();
   const navigate = useNavigate();
 
   const [countdowns, setCountdowns] = useState<Record<string, string>>({});
@@ -223,6 +223,7 @@ Be direct, highly motivational, and tactical. Keep formatting in clean Markdown 
       const data = await callGeminiWithRetry(apiKey, requestBody);
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "I was unable to formulate a rescue plan.";
       setAiPlan(text);
+      triggerRescueActivation(); // Increment Rescue Mode activations and update score immediately!
     } catch (err: any) {
       console.error('AI Rescue Plan Error:', err);
       setAiPlan(`⚠️ **Failed to generate AI plan:** ${err.message || 'Please check your internet connection or Gemini API key.'}`);

@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDataContext, type Conversation, type Message } from '../context/DataContext';
 import { callGeminiWithRetry } from '../utils/aiClient';
+import { parseTaskDueDate } from '../utils/dateParser';
 import './AIAssistantPage.css';
 
 const suggestions = [
@@ -148,7 +149,11 @@ export default function AIAssistantPage() {
     const activeTasksText = tasks
       .filter(t => !t.done)
       .slice(0, 10)
-      .map(t => `- [${t.priority.toUpperCase()}] ${t.text} (Due: ${t.due}${t.subtasks && t.subtasks.length > 0 ? `, Subtasks: ${t.subtasks.map((st: any) => st.text + (st.done ? ' [done]' : '')).join(', ')}` : ''})`)
+      .map(t => {
+        const dueDate = parseTaskDueDate(t.due);
+        const isOverdue = dueDate !== null && dueDate.getTime() < Date.now();
+        return `- [${t.priority.toUpperCase()}] ${t.text} (Due: ${t.due}${isOverdue ? ' [OVERDUE!]' : ''}${t.subtasks && t.subtasks.length > 0 ? `, Subtasks: ${t.subtasks.map((st: any) => st.text + (st.done ? ' [done]' : '')).join(', ')}` : ''})`;
+      })
       .join('\n');
 
     // Limit to 5 habits
@@ -173,8 +178,13 @@ export default function AIAssistantPage() {
     const lastSessions = focusSessions.slice(0, 5);
     const focusText = `Total Focus Sessions Logged: ${focusSessions.length}. Recent Focus Time: ${Math.round(lastSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60)} minutes in the last ${lastSessions.length} sessions.`;
 
+    const now = new Date();
+    const formattedDateTime = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
     return `You are "Nova", an elite productivity coach and AI life assistant.
 The user's name is ${userDisplayName}.
+The current real-world date and time is: ${formattedDateTime}.
+
 Here is their real-time application data:
 - Productivity Score: ${productivityScore}/100
 - Active Tasks:
@@ -190,7 +200,7 @@ ${focusText}
 
 Use this data to give hyper-personalized, context-aware responses. 
 Avoid generic advice. Always prioritize actions based on their actual tasks, habits, goals, and deadlines.
-For example, if they ask what to do next, suggest the most urgent and high-priority task from their active tasks, checking their calendar events for a free slot.
+If a task has "[OVERDUE!]" next to its due date, it means the deadline has passed. You MUST explicitly point out to the user that these tasks are OVERDUE and that they should focus on upcoming deadlines or the next active tasks instead of dwelling on overdue ones, but also prompt them to finish or reschedule the overdue tasks.
 Keep formatting clean, professional, and engaging using standard Markdown (e.g. bolding key terms with **, lists).`;
   };
 

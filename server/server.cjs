@@ -23,6 +23,12 @@ const pool = new Pool({
   },
 });
 
+// Handle pool errors to prevent process crash
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle pg client:', err.message || err);
+});
+
+
 // Test DB Connection and Initialize Schema
 pool.connect(async (err, client, release) => {
   if (err) {

@@ -168,6 +168,17 @@ const CelebrationOverlay = ({ goal, onClose }: { goal: Goal, onClose: () => void
 };
 
 const getGoalStats = (goal: Goal) => {
+  if (goal.milestones && goal.milestones.length > 0) {
+    const completedCount = goal.milestones.filter(m => m.done).length;
+    const progress = Math.round((completedCount / goal.milestones.length) * 100);
+    return {
+      totalDays: 0,
+      completedDaysCount: 0,
+      progress,
+      avgProgress: progress
+    };
+  }
+
   const start = goal.created_at ? new Date(goal.created_at) : new Date();
   const end = goal.completed_by ? new Date(goal.completed_by) : new Date();
   
