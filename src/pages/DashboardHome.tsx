@@ -27,7 +27,7 @@ export default function DashboardHome() {
   const todayFocusHours = useMemo(() => {
     const todayStr = new Date().toDateString();
     const todaySessions = focusSessions.filter(s => {
-      const d = new Date(s.created_at || s.createdAt || new Date());
+      const d = new Date(s.created_at || s.created_at || new Date());
       return d.toDateString() === todayStr;
     });
     const totalSeconds = todaySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
@@ -449,7 +449,7 @@ function AchievementsCelebrationWidget({ tasks, goals, habits, focusSessions }: 
   });
 
   const weeklyFocusSessions = focusSessions.filter(s => 
-    isWithinLastDays(s.created_at || s.createdAt, 7)
+    isWithinLastDays(s.created_at || s.created_at, 7)
   );
 
   const totalWeeklyFocusMinutes = Math.round(

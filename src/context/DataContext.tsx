@@ -4,7 +4,6 @@ import { type Task } from '../hooks/useTasks';
 import { type Habit } from '../hooks/useHabits';
 import { type Goal } from '../hooks/useGoals';
 import { type CalendarEvent } from '../hooks/useCalendarEvents';
-import { parseTaskDueDate } from '../utils/dateParser';
 import { calculateProductivityScore } from '../utils/productivityEngine';
 
 export interface FocusSession {

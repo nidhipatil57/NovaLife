@@ -41,7 +41,7 @@ export default function AnalyticsPage() {
     return daysOfWeek.map((day, index) => {
       const targetDateStr = weekDates[index];
       const daySessions = focusSessions.filter(s => {
-        const d = new Date(s.created_at || s.createdAt || new Date());
+        const d = new Date(s.created_at || s.created_at || new Date());
         return d.toDateString() === targetDateStr;
       });
       const totalSeconds = daySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
@@ -87,7 +87,7 @@ export default function AnalyticsPage() {
   const todayFocusHours = useMemo(() => {
     const todayStr = new Date().toDateString();
     const todaySessions = focusSessions.filter(s => {
-      const d = new Date(s.created_at || s.createdAt || new Date());
+      const d = new Date(s.created_at || s.created_at || new Date());
       return d.toDateString() === todayStr;
     });
     const totalSeconds = todaySessions.reduce((acc, s) => acc + (s.duration || 0), 0);
