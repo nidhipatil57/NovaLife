@@ -156,10 +156,15 @@ export default function DashboardLayout() {
           {!collapsed ? (
             <div className="sidebar-user" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div className="user-avatar-small">{userInitials}</div>
+                <div className="user-avatar-small">
+                  {user?.avatarUrl ? (
+                    <img src={user.avatarUrl} alt="Profile" />
+                  ) : (
+                    userInitials
+                  )}
+                </div>
                 <div>
                   <div className="user-name" style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-                  <div className="user-plan">Pro Plan</div>
                 </div>
               </div>
               <button 
@@ -169,12 +174,22 @@ export default function DashboardLayout() {
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
-                🚪
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+                  <path d="M9 4H4v16h5" />
+                  <path d="M20 12H9" />
+                  <path d="M13 8l-4 4 4 4" />
+                </svg>
               </button>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%' }}>
-              <div className="user-avatar-small" style={{ margin: '0 auto' }}>{userInitials}</div>
+              <div className="user-avatar-small" style={{ margin: '0 auto' }}>
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Profile" />
+                ) : (
+                  userInitials
+                )}
+              </div>
               <button 
                 onClick={handleLogout} 
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', fontSize: '1rem', color: 'var(--text-secondary)', transition: 'transform 0.2s' }} 
@@ -182,7 +197,11 @@ export default function DashboardLayout() {
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
-                🚪
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+                  <path d="M9 4H4v16h5" />
+                  <path d="M20 12H9" />
+                  <path d="M13 8l-4 4 4 4" />
+                </svg>
               </button>
             </div>
           )}

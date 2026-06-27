@@ -157,3 +157,66 @@
   --container-2xl: 1400px;
   --container-padding: var(--space-6);
 }
+
+/* ─── Light Theme Styles (Warm, Calming, Aesthetic) ─── */
+[data-theme="light"] {
+  /* Background Colors */
+  --bg-primary: #FAF6F0;
+  --bg-secondary: #F3EBE1;
+  --bg-tertiary: #EAE0D3;
+  --bg-card: rgba(243, 235, 225, 0.7);
+  --bg-card-hover: rgba(243, 235, 225, 0.9);
+  --bg-elevated: rgba(234, 224, 211, 0.9);
+
+  /* Accent Colors */
+  --accent-blue: #4A90E2;
+  --accent-blue-light: #357ABD;
+  --accent-blue-glow: rgba(74, 144, 226, 0.15);
+  --accent-purple: #8E65B5;
+  --accent-purple-light: #754E9C;
+  --accent-purple-glow: rgba(142, 101, 181, 0.15);
+  --accent-cyan: #3EAFB2;
+  --accent-cyan-light: #2A8C8E;
+  --accent-cyan-glow: rgba(62, 175, 178, 0.15);
+  --accent-pink: #D46A92;
+  --accent-pink-light: #B84B73;
+  --accent-pink-glow: rgba(212, 106, 146, 0.15);
+  --accent-green: #409C73;
+  --accent-green-light: #2D7C59;
+  --accent-red: #D9534F;
+  --accent-red-light: #B93E3A;
+  --accent-orange: #D97706;
+  --accent-orange-light: #B45F06;
+
+  /* Text Colors */
+  --text-primary: #2B1D19;
+  --text-secondary: #5C4D48;
+  --text-tertiary: #8A7771;
+  --text-muted: #B0A09A;
+  --text-gradient: linear-gradient(135deg, #7C4D3A, #B05B35, #D2764B);
+
+  /* Gradients */
+  --gradient-aurora: linear-gradient(135deg, #4A90E2, #8E65B5, #D46A92, #3EAFB2);
+  --gradient-blue-purple: linear-gradient(135deg, #4A90E2, #8E65B5);
+  --gradient-purple-pink: linear-gradient(135deg, #8E65B5, #D46A92);
+  --gradient-cyan-blue: linear-gradient(135deg, #3EAFB2, #4A90E2);
+  --gradient-hero: linear-gradient(180deg, #FAF6F0 0%, #F3EBE1 50%, #EAE0D3 100%);
+  --gradient-card-border: linear-gradient(135deg, rgba(74, 144, 226, 0.15), rgba(142, 101, 181, 0.15), rgba(212, 106, 146, 0.08));
+  --gradient-glow: radial-gradient(600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(74, 144, 226, 0.04), transparent 40%);
+
+  /* Glass Properties */
+  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-bg-hover: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(59, 46, 42, 0.08);
+  --glass-border-hover: rgba(59, 46, 42, 0.15);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(59, 46, 42, 0.04);
+  --shadow-md: 0 4px 16px rgba(59, 46, 42, 0.06);
+  --shadow-lg: 0 8px 32px rgba(59, 46, 42, 0.08);
+  --shadow-xl: 0 16px 64px rgba(59, 46, 42, 0.12);
+  --shadow-glow-blue: 0 0 20px rgba(74, 144, 226, 0.15);
+  --shadow-glow-purple: 0 0 20px rgba(142, 101, 181, 0.15);
+  --shadow-glow-cyan: 0 0 20px rgba(62, 175, 178, 0.15);
+  --shadow-glow-pink: 0 0 20px rgba(212, 106, 146, 0.15);
+}

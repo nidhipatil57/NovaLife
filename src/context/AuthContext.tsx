@@ -4,6 +4,13 @@ export interface User {
   uid: string;
   email: string;
   displayName: string;
+  bio?: string;
+  timezone?: string;
+  avatarUrl?: string | null;
+  occupation?: string;
+  weeklyFocusTarget?: number;
+  dailyTaskTarget?: number;
+  aiCoachTone?: string;
 }
 
 interface AuthContextType {
@@ -14,6 +21,7 @@ interface AuthContextType {
   loginWithGoogle: (credential: string) => Promise<User>;
   loginWithGitHub: () => Promise<User>;
   logout: () => Promise<void>;
+  updateUser: (updatedUser: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -113,6 +121,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       uid: 'github_user',
       email: 'nidhi.git@github.com',
       displayName: 'GitHub User',
+      bio: 'GitHub Developer',
+      timezone: 'Asia/Kolkata (IST)'
     };
     setUser(mockUser);
     return mockUser;
@@ -123,8 +133,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const updateUser = (updatedUser: Partial<User>) => {
+    setUser(prev => prev ? { ...prev, ...updatedUser } : null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, loginWithGoogle, loginWithGitHub, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, loginWithGoogle, loginWithGitHub, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
