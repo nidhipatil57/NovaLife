@@ -127,6 +127,7 @@ export default function SettingsPage() {
       });
       if (res.ok) {
         setGoogleConnected(false);
+        updateUser({ hasGoogleCalendar: false });
       }
     } catch (e) {
       console.error(e);

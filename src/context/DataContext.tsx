@@ -676,6 +676,75 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const calculateGoalProgress = (goal: {
+    created_at?: string;
+    completed_by?: string;
+    completed_dates?: string[];
+    milestones?: { text: string; done: boolean }[];
+  }) => {
+    let milestoneProgress = 100;
+    const hasMilestones = goal.milestones && goal.milestones.length > 0;
+    if (hasMilestones) {
+      const completedCount = goal.milestones.filter(m => m.done).length;
+      milestoneProgress = Math.round((completedCount / goal.milestones.length) * 100);
+    }
+
+    let calendarProgress = 100;
+    const hasTargetDate = !!goal.completed_by;
+    if (hasTargetDate) {
+      const start = goal.created_at ? new Date(goal.created_at) : new Date();
+      const end = new Date(goal.completed_by);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+
+      const requiredDates = [];
+      const curr = new Date(start);
+      const target = new Date(end);
+      if (!isNaN(curr.getTime()) && !isNaN(target.getTime()) && curr <= target) {
+        let count = 0;
+        while (curr <= target && count < 2000) {
+          const y = curr.getFullYear();
+          const m = String(curr.getMonth() + 1).padStart(2, '0');
+          const d = String(curr.getDate()).padStart(2, '0');
+          requiredDates.push(`${y}-${m}-${d}`);
+          curr.setDate(curr.getDate() + 1);
+          count++;
+        }
+      }
+
+      if (requiredDates.length > 0) {
+        const completedSet = new Set(goal.completed_dates || []);
+        const completedRequiredCount = requiredDates.filter(dateStr => completedSet.has(dateStr)).length;
+        calendarProgress = Math.round((completedRequiredCount / requiredDates.length) * 100);
+      } else {
+        const completedDaysCount = goal.completed_dates?.length || 0;
+        const timeDiff = end.getTime() - start.getTime();
+        let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        if (totalDays <= 0) totalDays = 1;
+        calendarProgress = Math.min(100, Math.round((completedDaysCount / totalDays) * 100));
+      }
+    } else if (!hasMilestones) {
+      const start = goal.created_at ? new Date(goal.created_at) : new Date();
+      start.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const timeDiff = today.getTime() - start.getTime();
+      let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      if (totalDays <= 0) totalDays = 30;
+
+      const completedDaysCount = goal.completed_dates?.length || 0;
+      calendarProgress = Math.min(100, Math.round((completedDaysCount / totalDays) * 100));
+    }
+
+    if (hasMilestones && hasTargetDate) {
+      return Math.min(milestoneProgress, calendarProgress);
+    } else if (hasMilestones) {
+      return milestoneProgress;
+    } else {
+      return calendarProgress;
+    }
+  };
+
   const toggleMilestone = async (goalId: string, milestoneIndex: number, skipSync = false) => {
     if (!user) return;
     const goal = goals.find((g) => g.id === goalId);
@@ -685,9 +754,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const isDone = !newMilestones[milestoneIndex].done;
     newMilestones[milestoneIndex].done = isDone;
 
-    // Recalculate progress based on newMilestones status
-    const completedCount = newMilestones.filter(m => m.done).length;
-    const progress = Math.round((completedCount / newMilestones.length) * 100);
+    // Recalculate progress based on newMilestones status and calendar completion
+    const progress = calculateGoalProgress({
+      ...goal,
+      milestones: newMilestones
+    });
 
     try {
       const token = localStorage.getItem('novalife_token');

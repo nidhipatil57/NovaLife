@@ -11,6 +11,7 @@ export interface User {
   weeklyFocusTarget?: number;
   dailyTaskTarget?: number;
   aiCoachTone?: string;
+  hasGoogleCalendar?: boolean;
 }
 
 interface AuthContextType {
