@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useDataContext, type Conversation, type Message } from '../context/DataContext';
-import { callGeminiWithRetry } from '../utils/aiClient';
+import { streamGeminiContent } from '../utils/aiClient';
 import { parseTaskDueDate } from '../utils/dateParser';
 import './AIAssistantPage.css';
 
@@ -75,13 +75,23 @@ export default function AIAssistantPage() {
     deleteConversation,
     getMessages,
     addMessage,
-    productivityScore
+    productivityScore,
+    transactions,
+    budgets,
+    savingsGoals,
+    financialHealthScore,
+    aiActiveConvId: activeConvId,
+    setAiActiveConvId: setActiveConvId,
+    aiMessages: messages,
+    setAiMessages: setMessages,
+    aiInput: input,
+    setAiInput: setInput,
+    aiSearchQuery: searchQuery,
+    setAiSearchQuery: setSearchQuery,
+    aiScrollTop: chatScrollTop,
+    setAiScrollTop: setChatScrollTop
   } = useDataContext();
 
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   
   // Renaming state
@@ -92,6 +102,10 @@ export default function AIAssistantPage() {
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
 
+  // When user sends a message, set this to false so we scroll to the incoming AI response
+  // Otherwise on mount/load, keep it true so we don't scroll
+  const hasScrolledForResponseRef = useRef(true);
+
   // Auto-scroll chat area: scroll to top of AI message, but bottom of user message
   useEffect(() => {
     if (messages.length === 0) return;
@@ -100,8 +114,9 @@ export default function AIAssistantPage() {
     if (lastMsg.role === 'user') {
       // User sent message: scroll to bottom
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } else {
+    } else if (lastMsg.role === 'model' && !hasScrolledForResponseRef.current && lastMsg.text.length > 0) {
       // AI sent response: scroll so the TOP of the AI bubble is visible at the top of the scrollable container
+      hasScrolledForResponseRef.current = true;
       lastMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [messages]);
@@ -112,6 +127,20 @@ export default function AIAssistantPage() {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [isTyping]);
+
+  // Save scroll position on scroll
+  const handleScroll = () => {
+    if (chatAreaRef.current) {
+      setChatScrollTop(chatAreaRef.current.scrollTop);
+    }
+  };
+
+  // Restore scroll position on mount or when messages load
+  useEffect(() => {
+    if (chatAreaRef.current && chatScrollTop > 0) {
+      chatAreaRef.current.scrollTop = chatScrollTop;
+    }
+  }, [activeConvId, messages.length]);
 
   // Load initial conversation if available
   useEffect(() => {
@@ -178,6 +207,16 @@ export default function AIAssistantPage() {
     const lastSessions = focusSessions.slice(0, 5);
     const focusText = `Total Focus Sessions Logged: ${focusSessions.length}. Recent Focus Time: ${Math.round(lastSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60)} minutes in the last ${lastSessions.length} sessions.`;
 
+    // Compute Finance Summary details
+    const balance = transactions.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+    const currentMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+    const monthlyExpenses = transactions.filter(t => t.type === 'expense' && t.date.startsWith(currentMonthStr)).reduce((sum, t) => sum + Number(t.amount), 0);
+    const savingsGoalsSummary = savingsGoals.map(g => `- ${g.name} (Saved ₹${g.saved_amount} of ₹${g.target_amount}, Progress: ${Math.round((Number(g.saved_amount)/Number(g.target_amount))*100)}%)`).join('\n');
+    const overspentBudgets = budgets.filter(b => {
+      const spent = transactions.filter(t => t.type === 'expense' && t.category === b.category && t.date.startsWith(currentMonthStr)).reduce((sum, st) => sum + Number(st.amount), 0);
+      return spent > Number(b.amount);
+    }).map(b => b.category).join(', ');
+
     const now = new Date();
     const formattedDateTime = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -186,7 +225,7 @@ The user's name is ${userDisplayName}.
 The current real-world date and time is: ${formattedDateTime}.
 
 Here is their real-time application data:
-- Productivity Score: ${productivityScore}/100
+- Productivity/Life Score: ${productivityScore}/100
 - Active Tasks:
 ${activeTasksText || "No active tasks."}
 - Habits:
@@ -197,11 +236,19 @@ ${goalsText || "No goals set up."}
 ${eventsText || "No calendar events."}
 - Focus Sessions:
 ${focusText}
+- Finance Overview: Available Balance is ₹${balance.toLocaleString()}, Current Monthly Expenses is ₹${monthlyExpenses.toLocaleString()}, Financial Health Index is ${financialHealthScore}/100.
+- Savings Goals Roadmap progress:
+${savingsGoalsSummary || "No savings goals configured."}
+- Overspent budgets: ${overspentBudgets || "None"}
 
-Use this data to give hyper-personalized, context-aware responses. 
-Avoid generic advice. Always prioritize actions based on their actual tasks, habits, goals, and deadlines.
-If a task has "[OVERDUE!]" next to its due date, it means the deadline has passed. You MUST explicitly point out to the user that these tasks are OVERDUE and that they should focus on upcoming deadlines or the next active tasks instead of dwelling on overdue ones, but also prompt them to finish or reschedule the overdue tasks.
-Keep formatting clean, professional, and engaging using standard Markdown (e.g. bolding key terms with **, lists).`;
+CRITICAL FORMATTING INSTRUCTIONS:
+1. Always sound like a natural, conversational, intelligent, and premium human life coach. Avoid robotic, template-like, or overly structured answers.
+2. DO NOT use markdown symbols like "#", "##", "###", or "***" for section headers or decorative markers. Frame natural titles or just use inline bolding (e.g., "**My Recommendations**") if needed.
+3. DO NOT output brackets or tags for task priorities (e.g., do NOT write "[MEDIUM] meeting" or "[HIGH] task"). Instead, seamlessly integrate priorities into your sentences (e.g., "you should complete the meeting, which is of medium priority" or "your high priority task...").
+4. Write in cohesive, well-written paragraphs. Use bullet points ONLY when they genuinely improve readability (e.g. listing distinct action items, options, or recommendations).
+5. Always analyze the user's actual database records provided above before responding to give hyper-personalized advice. Avoid generic advice or placeholders.
+6. If a task has "[OVERDUE!]" next to its due date, point out that it is overdue and prompt the user to complete or reschedule it, without dwelling on it.
+7. You have complete access to the user's actual finance information. If they ask about their balance, spending, budgets, or savings goals, answer them accurately using their real transaction records rather than placeholders.`;
   };
 
   const handleSendMessage = async (text?: string) => {
@@ -226,6 +273,9 @@ Keep formatting clean, professional, and engaging using standard Markdown (e.g. 
     const savedUserMsg = await addMessage(targetConvId, 'user', msgText);
     if (!savedUserMsg) return;
 
+    // Reset scroll flag for new response
+    hasScrolledForResponseRef.current = false;
+
     // Update Local Messages state
     setMessages(prev => [...prev, savedUserMsg]);
     setInput('');
@@ -245,7 +295,7 @@ Keep formatting clean, professional, and engaging using standard Markdown (e.g. 
       // Build context system prompt
       const systemPrompt = buildSystemPrompt();
 
-      // Call Gemini API with Retry
+      // Call Gemini API with Streaming
       const requestBody = {
         contents: [
           {
@@ -263,16 +313,40 @@ Keep formatting clean, professional, and engaging using standard Markdown (e.g. 
         }
       };
 
-      const data = await callGeminiWithRetry(apiKey, requestBody);
-      const aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I apologize, I wasn't able to construct a response.";
+      // Add a temporary model message
+      const tempAiMsgId = 'temp_' + Date.now();
+      setMessages(prev => [...prev, {
+        id: tempAiMsgId,
+        conversation_id: targetConvId,
+        role: 'model',
+        text: '',
+        created_at: new Date().toISOString()
+      }]);
 
-      // 2. Save Model Message to Database
-      const savedAiMsg = await addMessage(targetConvId, 'model', aiResponseText);
+      let accumulatedText = '';
+      const onChunk = (chunk: string) => {
+        setIsTyping(false); // Hide typing indicator once content starts arriving
+        accumulatedText += chunk;
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === tempAiMsgId ? { ...m, text: accumulatedText } : m
+          )
+        );
+      };
+
+      await streamGeminiContent(apiKey, requestBody, onChunk);
+
+      // Save Model Message to Database
+      const savedAiMsg = await addMessage(targetConvId, 'model', accumulatedText);
       if (savedAiMsg) {
-        setMessages(prev => [...prev, savedAiMsg]);
+        setMessages(prev =>
+          prev.map(m => (m.id === tempAiMsgId ? savedAiMsg : m))
+        );
       }
     } catch (err: any) {
       console.error('Gemini call error:', err);
+      // Remove temp message if it exists and is empty
+      setMessages(prev => prev.filter(m => !m.id.startsWith('temp_') && m.text !== ''));
       // Fallback message
       const errorMsg: Message = {
         id: 'err_' + Date.now(),
@@ -437,7 +511,7 @@ Keep formatting clean, professional, and engaging using standard Markdown (e.g. 
       {/* ─── Main Chat Window ─── */}
       <div className="ai-chat-main">
         {/* Chat Messages */}
-        <div className="ai-messages-area" ref={chatAreaRef}>
+        <div className="ai-messages-area" ref={chatAreaRef} onScroll={handleScroll}>
           {messages.length === 0 && !isTyping ? (
             <div className="empty-chat-coach" style={{ textAlign: 'center', margin: 'auto', padding: '40px', maxWidth: '500px' }}>
               <div className="ai-coach-logo" style={{ fontSize: '50px', marginBottom: '20px' }}>🤖</div>

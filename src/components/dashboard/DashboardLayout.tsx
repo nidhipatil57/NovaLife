@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useDataContext } from '../../context/DataContext';
 import './DashboardLayout.css';
 
 const navItems = [
@@ -9,6 +10,7 @@ const navItems = [
   { icon: '📅', label: 'Calendar', path: '/calendar' },
   { icon: '🎯', label: 'Goals', path: '/goals' },
   { icon: '🔄', label: 'Habits', path: '/habits' },
+  { icon: '💰', label: 'Finance', path: '/finance' },
   { icon: '📊', label: 'Analytics', path: '/analytics' },
   { icon: '🎧', label: 'Focus', path: '/focus' },
   { divider: true },
@@ -28,23 +30,47 @@ function AIChatbot() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
 
+  // Consume real finance data if logged in
+  let transactions: any[] = [];
+  let savingsGoals: any[] = [];
+  let financialHealthScore = 75;
+  try {
+    const context = useDataContext();
+    transactions = context.transactions || [];
+    savingsGoals = context.savingsGoals || [];
+    financialHealthScore = context.financialHealthScore || 75;
+  } catch (e) {}
+
   const sendMessage = () => {
     if (!input.trim()) return;
-    const userMsg = input;
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    const userMsg = input.toLowerCase().trim();
+    setMessages(prev => [...prev, { role: 'user', text: input }]);
     setInput('');
     setIsTyping(true);
     setTimeout(() => {
+      // Calculate real time parameters for quick replies
+      const balance = transactions.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+      const currentMonthStr = new Date().toISOString().substring(0, 7);
+      const monthlyExpenses = transactions
+        .filter(t => t.type === 'expense' && t.date.startsWith(currentMonthStr))
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+
       const responses: Record<string, string> = {
         'plan my day': "I've analyzed your schedule. Here's your optimized plan:\n\n🔴 2:00 PM — Physics Assignment (2h)\n🔵 4:00 PM — Team Meeting (1h)\n🟡 5:30 PM — Math Test Prep (1.5h)\n🟢 7:00 PM — Gym (1h)\n\nYou have 85% chance of completing everything!",
         'what should i do next': "Based on urgency and your current energy level, I recommend starting with the Physics Assignment. It's due tonight and carries the highest priority score (98/100).",
         'help me study': "Let's create a study sprint! I'll break your material into 25-minute focused sessions with 5-minute breaks. Which subject should we start with?",
         'reschedule': "I've analyzed your remaining tasks. Here's a restructured plan that accounts for your energy levels and time constraints.",
+        'balance': `Your available balance is ₹${balance.toLocaleString()}.`,
+        'health': `Your Financial Health Score is ${financialHealthScore}/100. Check the Finance Hub to see your savings rate and budget discipline detail.`,
+        'goal': savingsGoals.length > 0 
+          ? `You have ${savingsGoals.length} savings goals. Primary goal: ${savingsGoals[0].name} (Saved: ₹${Number(savingsGoals[0].saved_amount).toLocaleString()} / ₹${Number(savingsGoals[0].target_amount).toLocaleString()}).`
+          : "You haven't set up any savings goals yet. Navigate to 💰 Finance to create a milestone roadmap!",
+        'spend': `This month, you have spent a total of ₹${monthlyExpenses.toLocaleString()}. Navigate to the Finance Hub to see a full analytics breakdown.`
       };
-      const key = Object.keys(responses).find(k => userMsg.toLowerCase().includes(k));
+      const key = Object.keys(responses).find(k => userMsg.includes(k));
       setMessages(prev => [...prev, {
         role: 'ai',
-        text: key ? responses[key] : "I'd be happy to help! Try: 'plan my day', 'what should I do next', or 'help me study'."
+        text: key ? responses[key] : "I'd be happy to help! Try asking about your 'balance', 'spending', 'savings goal', 'financial health', or ask me to 'plan my day'!"
       }]);
       setIsTyping(false);
     }, 1200);
@@ -103,6 +129,37 @@ export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  const mainRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
+  const prevPathnameRef = useRef<string>(location.pathname);
+
+  // Preserve scroll position of .dash-main per route
+  useEffect(() => {
+    const mainElement = mainRef.current;
+    if (!mainElement) return;
+
+    // Save scroll position for the previous route
+    const prevPath = prevPathnameRef.current;
+    if (prevPath !== location.pathname) {
+      scrollPositionsRef.current[prevPath] = mainElement.scrollTop;
+    }
+
+    // Update prev pathname ref
+    prevPathnameRef.current = location.pathname;
+
+    // Restore scroll position for the current route
+    const targetScrollTop = scrollPositionsRef.current[location.pathname] || 0;
+
+    // Wait a brief moment for the new page components to finish mounting
+    const timer = setTimeout(() => {
+      if (mainRef.current) {
+        mainRef.current.scrollTop = targetScrollTop;
+      }
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     try {
@@ -208,7 +265,7 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      <main className="dash-main">
+      <main className="dash-main" ref={mainRef}>
         <Outlet />
       </main>
 

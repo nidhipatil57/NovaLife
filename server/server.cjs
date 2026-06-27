@@ -88,6 +88,58 @@ pool.connect(async (err, client, release) => {
             text TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
+
+          CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            type VARCHAR(10) NOT NULL, -- 'income' or 'expense'
+            amount NUMERIC(12, 2) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            date VARCHAR(50) NOT NULL,
+            time VARCHAR(10) DEFAULT '',
+            merchant VARCHAR(150) DEFAULT '',
+            payment_method VARCHAR(50) DEFAULT 'Cash',
+            notes TEXT DEFAULT '',
+            recurring BOOLEAN DEFAULT FALSE,
+            recurring_frequency VARCHAR(20) DEFAULT '',
+            tags JSONB DEFAULT '[]',
+            receipt_url TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          CREATE TABLE IF NOT EXISTS budgets (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            category VARCHAR(50) NOT NULL,
+            amount NUMERIC(12, 2) NOT NULL,
+            month_year VARCHAR(10) NOT NULL, -- 'YYYY-MM'
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, category, month_year)
+          );
+
+          CREATE TABLE IF NOT EXISTS savings_goals (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR(150) NOT NULL,
+            target_amount NUMERIC(12, 2) NOT NULL,
+            saved_amount NUMERIC(12, 2) DEFAULT 0,
+            target_date VARCHAR(50) DEFAULT '',
+            color VARCHAR(50) DEFAULT 'var(--accent-blue)',
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          CREATE TABLE IF NOT EXISTS bills (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(150) NOT NULL,
+            amount NUMERIC(12, 2) NOT NULL,
+            due_date VARCHAR(50) NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            paid BOOLEAN DEFAULT FALSE,
+            recurring BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
         `);
         console.log('Database schema initialized/verified and calendar/goal columns migrated successfully.');
       } else {
@@ -1251,6 +1303,342 @@ app.post('/api/conversations/:conversationId/messages', authenticateToken, async
   } catch (err) {
     console.error('Error adding message:', err);
     res.status(500).json({ error: 'Error creating message.' });
+  }
+});
+
+// ------------------- FINANCE CRUD ROUTES -------------------
+
+// Transactions Endpoints
+app.get('/api/finance/transactions', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC, id DESC',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching transactions:', err);
+    res.status(500).json({ error: 'Error fetching transactions.' });
+  }
+});
+
+app.post('/api/finance/transactions', authenticateToken, async (req, res) => {
+  const { type, amount, category, date, time, merchant, payment_method, notes, recurring, recurring_frequency, tags, receipt_url } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO transactions (user_id, type, amount, category, date, time, merchant, payment_method, notes, recurring, recurring_frequency, tags, receipt_url) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      [
+        req.user.id,
+        type,
+        amount,
+        category,
+        date,
+        time || '',
+        merchant || '',
+        payment_method || 'Cash',
+        notes || '',
+        recurring || false,
+        recurring_frequency || '',
+        JSON.stringify(tags || []),
+        receipt_url || ''
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding transaction:', err);
+    res.status(500).json({ error: 'Error adding transaction.' });
+  }
+});
+
+app.put('/api/finance/transactions/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { type, amount, category, date, time, merchant, payment_method, notes, recurring, recurring_frequency, tags, receipt_url } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE transactions 
+       SET type = COALESCE($3, type),
+           amount = COALESCE($4, amount),
+           category = COALESCE($5, category),
+           date = COALESCE($6, date),
+           time = COALESCE($7, time),
+           merchant = COALESCE($8, merchant),
+           payment_method = COALESCE($9, payment_method),
+           notes = COALESCE($10, notes),
+           recurring = COALESCE($11, recurring),
+           recurring_frequency = COALESCE($12, recurring_frequency),
+           tags = COALESCE($13, tags),
+           receipt_url = COALESCE($14, receipt_url)
+       WHERE user_id = $1 AND id = $2 RETURNING *`,
+      [
+        req.user.id,
+        id,
+        type,
+        amount,
+        category,
+        date,
+        time,
+        merchant,
+        payment_method,
+        notes,
+        recurring,
+        recurring_frequency,
+        tags ? JSON.stringify(tags) : null,
+        receipt_url
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaction not found or unauthorized.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating transaction:', err);
+    res.status(500).json({ error: 'Error updating transaction.' });
+  }
+});
+
+app.delete('/api/finance/transactions/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM transactions WHERE user_id = $1 AND id = $2 RETURNING *',
+      [req.user.id, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaction not found or unauthorized.' });
+    }
+    res.json({ message: 'Transaction deleted successfully.', transaction: result.rows[0] });
+  } catch (err) {
+    console.error('Error deleting transaction:', err);
+    res.status(500).json({ error: 'Error deleting transaction.' });
+  }
+});
+
+// Budgets Endpoints
+app.get('/api/finance/budgets', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM budgets WHERE user_id = $1',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching budgets:', err);
+    res.status(500).json({ error: 'Error fetching budgets.' });
+  }
+});
+
+app.post('/api/finance/budgets', authenticateToken, async (req, res) => {
+  const { category, amount, month_year } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO budgets (user_id, category, amount, month_year) 
+       VALUES ($1, $2, $3, $4) 
+       ON CONFLICT (user_id, category, month_year) 
+       DO UPDATE SET amount = EXCLUDED.amount 
+       RETURNING *`,
+      [req.user.id, category, amount, month_year]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding budget:', err);
+    res.status(500).json({ error: 'Error adding budget.' });
+  }
+});
+
+app.delete('/api/finance/budgets/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM budgets WHERE user_id = $1 AND id = $2 RETURNING *',
+      [req.user.id, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Budget not found or unauthorized.' });
+    }
+    res.json({ message: 'Budget deleted successfully.', budget: result.rows[0] });
+  } catch (err) {
+    console.error('Error deleting budget:', err);
+    res.status(500).json({ error: 'Error deleting budget.' });
+  }
+});
+
+// Savings Goals Endpoints
+app.get('/api/finance/savings-goals', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM savings_goals WHERE user_id = $1 ORDER BY id DESC',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching savings goals:', err);
+    res.status(500).json({ error: 'Error fetching savings goals.' });
+  }
+});
+
+app.post('/api/finance/savings-goals', authenticateToken, async (req, res) => {
+  const { name, target_amount, saved_amount, target_date, color, notes } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO savings_goals (user_id, name, target_amount, saved_amount, target_date, color, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        req.user.id,
+        name,
+        target_amount,
+        saved_amount || 0,
+        target_date || '',
+        color || 'var(--accent-blue)',
+        notes || ''
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding savings goal:', err);
+    res.status(500).json({ error: 'Error adding savings goal.' });
+  }
+});
+
+app.put('/api/finance/savings-goals/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, target_amount, saved_amount, target_date, color, notes } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE savings_goals 
+       SET name = COALESCE($3, name),
+           target_amount = COALESCE($4, target_amount),
+           saved_amount = COALESCE($5, saved_amount),
+           target_date = COALESCE($6, target_date),
+           color = COALESCE($7, color),
+           notes = COALESCE($8, notes)
+       WHERE user_id = $1 AND id = $2 RETURNING *`,
+      [
+        req.user.id,
+        id,
+        name,
+        target_amount,
+        saved_amount,
+        target_date,
+        color,
+        notes
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Savings goal not found or unauthorized.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating savings goal:', err);
+    res.status(500).json({ error: 'Error updating savings goal.' });
+  }
+});
+
+app.delete('/api/finance/savings-goals/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM savings_goals WHERE user_id = $1 AND id = $2 RETURNING *',
+      [req.user.id, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Savings goal not found or unauthorized.' });
+    }
+    res.json({ message: 'Savings goal deleted successfully.', goal: result.rows[0] });
+  } catch (err) {
+    console.error('Error deleting savings goal:', err);
+    res.status(500).json({ error: 'Error deleting savings goal.' });
+  }
+});
+
+// Bills Endpoints
+app.get('/api/finance/bills', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM bills WHERE user_id = $1 ORDER BY due_date ASC, id DESC',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching bills:', err);
+    res.status(500).json({ error: 'Error fetching bills.' });
+  }
+});
+
+app.post('/api/finance/bills', authenticateToken, async (req, res) => {
+  const { title, amount, due_date, category, paid, recurring } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO bills (user_id, title, amount, due_date, category, paid, recurring) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        req.user.id,
+        title,
+        amount,
+        due_date,
+        category,
+        paid || false,
+        recurring || false
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding bill:', err);
+    res.status(500).json({ error: 'Error adding bill.' });
+  }
+});
+
+app.put('/api/finance/bills/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { title, amount, due_date, category, paid, recurring } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE bills 
+       SET title = COALESCE($3, title),
+           amount = COALESCE($4, amount),
+           due_date = COALESCE($5, due_date),
+           category = COALESCE($6, category),
+           paid = COALESCE($7, paid),
+           recurring = COALESCE($8, recurring)
+       WHERE user_id = $1 AND id = $2 RETURNING *`,
+      [
+        req.user.id,
+        id,
+        title,
+        amount,
+        due_date,
+        category,
+        paid,
+        recurring
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bill not found or unauthorized.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating bill:', err);
+    res.status(500).json({ error: 'Error updating bill.' });
+  }
+});
+
+app.delete('/api/finance/bills/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM bills WHERE user_id = $1 AND id = $2 RETURNING *',
+      [req.user.id, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Bill not found or unauthorized.' });
+    }
+    res.json({ message: 'Bill deleted successfully.', bill: result.rows[0] });
+  } catch (err) {
+    console.error('Error deleting bill:', err);
+    res.status(500).json({ error: 'Error deleting bill.' });
   }
 });
 

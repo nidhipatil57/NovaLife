@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useGoals } from '../hooks/useGoals';
 import type { Goal } from '../hooks/useGoals';
 import { CustomSelect } from '../components/ui/CustomSelect';
+import { useDataContext } from '../context/DataContext';
+import { streamGeminiContent } from '../utils/aiClient';
 import './GoalsPage.css';
 
 const categories = ['All', 'Academic', 'Career', 'Health', 'Finance', 'Personal'];
@@ -180,7 +182,7 @@ const getGoalStats = (goal: Goal) => {
   let totalDays = 0;
   let completedDaysCount = goal.completed_dates?.length || 0;
 
-  if (hasTargetDate) {
+  if (hasTargetDate && goal.completed_by) {
     const start = goal.created_at ? new Date(goal.created_at) : new Date();
     const end = new Date(goal.completed_by);
     start.setHours(0, 0, 0, 0);
@@ -301,8 +303,54 @@ const calculateStreak = (completedDates: string[]): number => {
   return streak;
 };
 
+const renderMarkdown = (text: string) => {
+  return text.split('\n').map((line, i) => {
+    const isBullet = line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*');
+    let lineContent = line;
+    if (isBullet) {
+      lineContent = line.replace(/^[•\-*]\s*/, '');
+    }
+
+    const renderedContent: React.ReactNode[] = [];
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = boldRegex.exec(lineContent)) !== null) {
+      if (match.index > lastIndex) {
+        renderedContent.push(lineContent.substring(lastIndex, match.index));
+      }
+      renderedContent.push(<strong key={match.index}>{match[1]}</strong>);
+      lastIndex = boldRegex.lastIndex;
+    }
+    if (lastIndex < lineContent.length) {
+      renderedContent.push(lineContent.substring(lastIndex));
+    }
+
+    return (
+      <div key={i} style={{ 
+        marginBottom: isBullet ? '4px' : '8px', 
+        paddingLeft: isBullet ? '16px' : '0',
+        position: 'relative'
+      }}>
+        {isBullet && <span style={{ position: 'absolute', left: '4px', color: 'var(--accent-blue-light)' }}>•</span>}
+        {renderedContent}
+      </div>
+    );
+  });
+};
+
 export default function GoalsPage() {
   const { goals, loading, addGoal, toggleMilestone, deleteGoal, updateGoal, user } = useGoals();
+  const { focusSessions, tasks, habits } = useDataContext();
+
+  // AI Tab States
+  const [detailTab, setDetailTab] = useState<'calendar' | 'ai'>('calendar');
+  const [goalAnalyses, setGoalAnalyses] = useState<{[key: string]: any}>({});
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [goalQuestions, setGoalQuestions] = useState<{[key: string]: Array<{q: string, a: string, loading?: boolean}>}>({});
+  const [customQuestionInput, setCustomQuestionInput] = useState('');
+
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
 
@@ -328,6 +376,8 @@ export default function GoalsPage() {
   const [newMilestonesInput, setNewMilestonesInput] = useState('');
   const [newCompletedBy, setNewCompletedBy] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [autoGenerateMilestones, setAutoGenerateMilestones] = useState(true);
+  const [isCreatingGoal, setIsCreatingGoal] = useState(false);
 
   // Calendar Detail Modal
   const [selectedGoalForDetail, setSelectedGoalForDetail] = useState<Goal | null>(null);
@@ -353,17 +403,213 @@ export default function GoalsPage() {
   // Celebration & Fade Away animations
   const [celebratingGoal, setCelebratingGoal] = useState<Goal | null>(null);
   const [fadeAwayGoalId, setFadeAwayGoalId] = useState<string | null>(null);
+  // AI Goal Assistant useEffect and functions
+  useEffect(() => {
+    if (detailTab === 'ai' && selectedGoalForDetail && !goalAnalyses[selectedGoalForDetail.id] && !loadingAnalysis) {
+      runGoalAnalysis(selectedGoalForDetail);
+    }
+  }, [detailTab, selectedGoalForDetail]);
+
+  const runGoalAnalysis = async (goal: Goal) => {
+    setLoadingAnalysis(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API key is not configured');
+
+      const systemPrompt = `You are "Nova", an elite productivity coach. Analyze the following goal:
+- Goal: "${goal.name}"
+- Category: "${goal.category}"
+- Completed By Date: "${goal.completed_by || 'Not specified'}"
+- Current Progress: ${goal.progress}%
+- Milestones: ${JSON.stringify(goal.milestones || [])}
+- Notes: "${goal.notes || ''}"
+- Current Streak: ${goal.streak || 0} days
+
+Context of other goals: ${JSON.stringify(goals.filter(g => g.id !== goal.id).map(g => ({ name: g.name, category: g.category, progress: g.progress })))}
+Context of tasks: ${JSON.stringify(tasks.slice(0, 10).map(t => ({ text: t.text, due: t.due, done: t.done })))}
+Context of focus sessions: ${JSON.stringify(focusSessions.slice(0, 10).map(s => ({ name: s.name, duration: s.duration })))}
+
+Provide an intelligent, structured evaluation of this goal.
+You MUST respond with a JSON object exactly matching this schema. Do not write any explanations outside the JSON object. Do not wrap the JSON in markdown formatting.
+
+{
+  "completionProbability": "Percentage probability of completing before target date, e.g. 85%",
+  "expectedCompletionDate": "Predicted realistic date, e.g. July 20, 2026",
+  "remainingEffort": "Estimated hours of focused work remaining, e.g. 30 hours",
+  "milestoneAnalysis": [
+    {
+      "milestone": "Name of existing milestone",
+      "status": "On Track" | "At Risk" | "Not Started",
+      "suggestions": ["suggested subtask 1", "suggested subtask 2"]
+    }
+  ],
+  "recoveryRecommendations": "Specific, action-oriented coaching tips if progress is lagging or streak is broken",
+  "relationships": "How completing this goal links/adds value to other active goals or career progression"
+}
+`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(text.trim());
+      
+      setGoalAnalyses(prev => ({
+        ...prev,
+        [goal.id]: parsed
+      }));
+    } catch (err) {
+      console.error('Goal analysis failed:', err);
+      // Fallback object
+      setGoalAnalyses(prev => ({
+        ...prev,
+        [goal.id]: {
+          error: true,
+          completionProbability: '70%',
+          expectedCompletionDate: goal.completed_by || 'Soon',
+          remainingEffort: '25 hours',
+          milestoneAnalysis: (goal.milestones || []).map(m => ({
+            milestone: m.text,
+            status: m.done ? 'On Track' : 'Not Started',
+            suggestions: ['Focus on consistent daily effort', 'Review progress weekly']
+          })),
+          recoveryRecommendations: 'Nova recommends dedicating at least 20 minutes a day to maintain your streak.',
+          relationships: 'Completing this goal reinforces your overall productivity habit stack.'
+        }
+      }));
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  };
+
+  const handleAskGoalQuestion = async (questionText: string) => {
+    if (!selectedGoalForDetail || !questionText.trim()) return;
+
+    const questionTextTrimmed = questionText.trim();
+    const newEntry = { q: questionTextTrimmed, a: '', loading: true };
+    
+    setGoalQuestions(prev => {
+      const existing = prev[selectedGoalForDetail.id] || [];
+      return {
+        ...prev,
+        [selectedGoalForDetail.id]: [...existing, newEntry]
+      };
+    });
+    setCustomQuestionInput('');
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API key is not configured');
+
+      const systemPrompt = `You are "Nova", an elite productivity coach. Help the user with a question about their goal: "${selectedGoalForDetail.name}" (Category: ${selectedGoalForDetail.category}, Progress: ${selectedGoalForDetail.progress}%).
+Here is their other context:
+- Goals: ${JSON.stringify(goals.map(g => ({ name: g.name, progress: g.progress })))}
+- Tasks: ${JSON.stringify(tasks.slice(0, 10).map(t => ({ text: t.text, done: t.done })))}
+- Habits: ${JSON.stringify(habits.slice(0, 10).map(h => h.name))}
+
+Answer the question in a friendly, conversational, yet highly tactical way. Frame priorities/complexities as full sentences (never say '[MEDIUM]'). Do not use markdown headers (#, ##). Write 1-2 concise, premium paragraphs. Use lists only for distinct recommendations.
+
+Question: "${questionTextTrimmed}"`;
+
+      const requestBody = {
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt }] }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        }
+      };
+
+      let accumulatedText = '';
+      const onChunk = (chunk: string) => {
+        accumulatedText += chunk;
+        setGoalQuestions(prev => {
+          const list = prev[selectedGoalForDetail.id] || [];
+          return {
+            ...prev,
+            [selectedGoalForDetail.id]: list.map(item => 
+              item.q === questionTextTrimmed ? { ...item, a: accumulatedText, loading: false } : item
+            )
+          };
+        });
+      };
+
+      await streamGeminiContent(apiKey, requestBody, onChunk);
+
+    } catch (err: any) {
+      console.error('Goal Q&A failed:', err);
+      setGoalQuestions(prev => {
+        const list = prev[selectedGoalForDetail.id] || [];
+        return {
+          ...prev,
+          [selectedGoalForDetail.id]: list.map(item => 
+            item.q === questionTextTrimmed ? { ...item, a: `⚠️ Failed to get answer: ${err.message || 'Connection error'}`, loading: false } : item
+          )
+        };
+      });
+    }
+  };
 
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
 
+    setIsCreatingGoal(true);
     try {
-      const milestones = newMilestonesInput
+      let milestones = newMilestonesInput
         .split(',')
         .map((m) => m.trim())
         .filter((m) => m.length > 0)
         .map((m) => ({ text: m, done: false }));
+
+      if (milestones.length === 0 && autoGenerateMilestones) {
+        try {
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (apiKey) {
+            const prompt = `You are "Nova", an elite productivity and goal achievement coach. The user is creating a new goal:
+Goal Name: "${newName}"
+Category: "${newCategory}"
+Notes: "${newNotes || ''}"
+
+Based on this, generate a complete, logical action plan of 5 to 7 chronological roadmap milestones.
+Example: For "Crack Placement Interview", generate: "Learn DSA", "Practice Aptitude", "Build Resume", "Improve LinkedIn", "Complete Mock Interviews", "Apply to Companies", "Track Applications".
+
+You must respond with a JSON array of strings only. Do not write any explanations, markdown block formatting, or preambles. Output EXACTLY a JSON array, e.g. ["Milestone 1", "Milestone 2", "Milestone 3"]`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+              })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+              const parsed = JSON.parse(text.trim());
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                milestones = parsed.map(m => ({ text: String(m), done: false }));
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to auto-generate milestones:', err);
+        }
+      }
 
       await addGoal({
         name: newName,
@@ -384,9 +630,12 @@ export default function GoalsPage() {
       setNewMilestonesInput('');
       setNewCompletedBy('');
       setNewNotes('');
+      setAutoGenerateMilestones(true);
       setShowAddModal(false);
     } catch (err) {
       alert('Failed to add goal.');
+    } finally {
+      setIsCreatingGoal(false);
     }
   };
 
@@ -918,8 +1167,46 @@ export default function GoalsPage() {
                 />
               </div>
 
-              <button type="submit" className="btn-primary" style={{ marginTop: '12px', padding: '14px' }}>
-                Create Goal
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0 12px 0' }}>
+                <input 
+                  type="checkbox" 
+                  id="autoGenerateMilestones"
+                  checked={autoGenerateMilestones}
+                  onChange={e => setAutoGenerateMilestones(e.target.checked)}
+                  style={{ width: 'auto', cursor: 'pointer' }}
+                />
+                <label htmlFor="autoGenerateMilestones" style={{ fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+                  ✨ Auto-generate full roadmap milestones with Nova AI (if left empty)
+                </label>
+              </div>
+
+              <button 
+                type="submit" 
+                className="btn-primary" 
+                disabled={isCreatingGoal}
+                style={{ 
+                  marginTop: '12px', 
+                  padding: '14px', 
+                  opacity: isCreatingGoal ? 0.7 : 1, 
+                  cursor: isCreatingGoal ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isCreatingGoal ? (
+                  <>
+                    <div className="typing" style={{ display: 'inline-flex', gap: '3px', margin: 0, padding: 0 }}>
+                      <span className="typing-dot" style={{ width: '4px', height: '4px', background: 'white' }}></span>
+                      <span className="typing-dot" style={{ width: '4px', height: '4px', background: 'white' }}></span>
+                      <span className="typing-dot" style={{ width: '4px', height: '4px', background: 'white' }}></span>
+                    </div>
+                    <span>Generating Roadmap...</span>
+                  </>
+                ) : (
+                  'Create Goal'
+                )}
               </button>
             </form>
           </div>
@@ -991,7 +1278,7 @@ export default function GoalsPage() {
 
        {/* Goal Detail & Calendar Tracker Modal */}
       {selectedGoalForDetail && (
-        <div className="task-detail-overlay" onClick={() => setSelectedGoalForDetail(null)}>
+        <div className="task-detail-overlay" onClick={() => { setSelectedGoalForDetail(null); setDetailTab('calendar'); }}>
           <div className="task-detail-panel widget goal-detail-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '820px', width: '95vw', position: 'relative' }}>
             <button 
               type="button"
@@ -1020,7 +1307,7 @@ export default function GoalsPage() {
             >
               ✏️ {isEditingDetail ? 'Close Edit' : 'Edit'}
             </button>
-            <button className="detail-close" onClick={() => setSelectedGoalForDetail(null)}>✕</button>
+            <button className="detail-close" onClick={() => { setSelectedGoalForDetail(null); setDetailTab('calendar'); }}>✕</button>
             
             <div className="goal-detail-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '20px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1044,6 +1331,22 @@ export default function GoalsPage() {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="detail-tabs-nav" style={{ marginBottom: '20px' }}>
+              <button 
+                className={detailTab === 'calendar' ? 'active' : ''} 
+                onClick={() => setDetailTab('calendar')}
+              >
+                📅 Calendar & Milestones
+              </button>
+              <button 
+                className={detailTab === 'ai' ? 'active' : ''} 
+                onClick={() => setDetailTab('ai')}
+              >
+                🤖 AI Action Roadmap & Analytics
+              </button>
             </div>
 
             {/* Inline Editing panel - opens inside modal above other details */}
@@ -1154,83 +1457,266 @@ export default function GoalsPage() {
             )}
 
             {/* Streak & Calendar Section Layout (Two Column Grid) */}
-            <div className="goal-detail-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
-              
-              {/* Left Column: Streak and Milestones */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div className="goal-streak-banner" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                  <span style={{ fontSize: '32px' }}>🔥</span>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
-                      {selectedGoalForDetail.streak || 0} Day Streak
+            {detailTab === 'calendar' && (
+              <div className="goal-detail-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '24px' }}>
+                
+                {/* Left Column: Streak and Milestones */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div className="goal-streak-banner" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <span style={{ fontSize: '32px' }}>🔥</span>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#F59E0B' }}>
+                        {selectedGoalForDetail.streak || 0} Day Streak
+                      </h4>
+                      <p style={{ margin: '4px 0 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                        Check off your goal daily!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Milestones checklist inside details modal (no progress recorded) */}
+                  <div className="milestones-detail-section" style={{ background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(255,255,255,0.03)' }}>
+                    <h4 style={{ marginBottom: '12px', fontWeight: 'bold', fontSize: 'var(--text-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🎯</span> Roadmap Milestones
                     </h4>
-                    <p style={{ margin: '4px 0 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      Check off your goal daily!
-                    </p>
+                    {selectedGoalForDetail.milestones && selectedGoalForDetail.milestones.length > 0 ? (
+                      <div className="detail-milestones-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {selectedGoalForDetail.milestones.map((m, i) => (
+                          <div 
+                            key={i} 
+                            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                            onClick={async () => {
+                              await toggleMilestone(selectedGoalForDetail.id, i);
+                              // Update local modal state
+                              setSelectedGoalForDetail(prev => {
+                                if (!prev) return null;
+                                const newMilestones = [...prev.milestones];
+                                newMilestones[i].done = !newMilestones[i].done;
+                                return { ...prev, milestones: newMilestones };
+                              });
+                            }}
+                          >
+                            <div className="milestone-checkbox" style={{
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '4px',
+                              border: `1.5px solid ${m.done ? selectedGoalForDetail.color : 'rgba(255,255,255,0.3)'}`,
+                              backgroundColor: m.done ? selectedGoalForDetail.color : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '9px',
+                              color: 'white',
+                              transition: 'all 0.2s ease'
+                            }}>
+                              {m.done && '✓'}
+                            </div>
+                            <span style={{ 
+                              fontSize: '13px', 
+                              color: m.done ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+                              textDecoration: m.done ? 'line-through' : 'none',
+                              transition: 'all 0.2s ease'
+                            }}>
+                              {m.text}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>No milestones set.</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Milestones checklist inside details modal (no progress recorded) */}
-                <div className="milestones-detail-section" style={{ background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                  <h4 style={{ marginBottom: '12px', fontWeight: 'bold', fontSize: 'var(--text-sm)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>🎯</span> Roadmap Milestones
-                  </h4>
-                  {selectedGoalForDetail.milestones && selectedGoalForDetail.milestones.length > 0 ? (
-                    <div className="detail-milestones-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {selectedGoalForDetail.milestones.map((m, i) => (
-                        <div 
-                          key={i} 
-                          style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-                          onClick={async () => {
-                            await toggleMilestone(selectedGoalForDetail.id, i);
-                            // Update local modal state
-                            setSelectedGoalForDetail(prev => {
-                              if (!prev) return null;
-                              const newMilestones = [...prev.milestones];
-                              newMilestones[i].done = !newMilestones[i].done;
-                              return { ...prev, milestones: newMilestones };
-                            });
-                          }}
-                        >
-                          <div className="milestone-checkbox" style={{
-                            width: '16px',
-                            height: '16px',
-                            borderRadius: '4px',
-                            border: `1.5px solid ${m.done ? selectedGoalForDetail.color : 'rgba(255,255,255,0.3)'}`,
-                            backgroundColor: m.done ? selectedGoalForDetail.color : 'transparent',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '9px',
-                            color: 'white',
-                            transition: 'all 0.2s ease'
-                          }}>
-                            {m.done && '✓'}
-                          </div>
-                          <span style={{ 
-                            fontSize: '13px', 
-                            color: m.done ? 'var(--text-tertiary)' : 'var(--text-secondary)',
-                            textDecoration: m.done ? 'line-through' : 'none',
-                            transition: 'all 0.2s ease'
-                          }}>
-                            {m.text}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>No milestones set.</p>
-                  )}
+                {/* Right Column: Calendar Tracker */}
+                <div>
+                  <h4 style={{ marginBottom: '12px', fontWeight: 'bold', fontSize: 'var(--text-base)', textAlign: 'center' }}>Did you work towards completing your goal today?🎯</h4>
+                  {renderCalendar(selectedGoalForDetail)}
                 </div>
-              </div>
 
-              {/* Right Column: Calendar Tracker */}
-              <div>
-                <h4 style={{ marginBottom: '12px', fontWeight: 'bold', fontSize: 'var(--text-base)', textAlign: 'center' }}>Did you work towards completing your goal today?🎯</h4>
-                {renderCalendar(selectedGoalForDetail)}
               </div>
+            )}
 
-            </div>
+            {detailTab === 'ai' && (
+              <div className="tab-content-container ai-goal-coach-view" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {loadingAnalysis && !goalAnalyses[selectedGoalForDetail.id] ? (
+                  <div className="ai-loading-panel" style={{ textAlign: 'center', padding: '30px' }}>
+                    <div className="ai-onboard-avatar" style={{ margin: '0 auto 16px auto', width: '36px', height: '36px' }}></div>
+                    <p style={{ fontSize: 'var(--text-sm)' }}>Nova is analyzing your milestones, streak consistency, and predicting completion dates...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Dynamic Analysis Cards */}
+                    {goalAnalyses[selectedGoalForDetail.id] && (
+                      <div className="ai-analysis-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>📈 Estimated Probability</div>
+                          <div style={{ fontSize: 'var(--text-base)', fontWeight: 'bold', color: 'var(--accent-green)' }}>
+                            {goalAnalyses[selectedGoalForDetail.id].completionProbability}
+                          </div>
+                        </div>
+                        
+                        <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>📅 Expected Completion Date</div>
+                          <div style={{ fontSize: 'var(--text-base)', fontWeight: 'bold', color: 'var(--accent-blue-light)' }}>
+                            {goalAnalyses[selectedGoalForDetail.id].expectedCompletionDate}
+                          </div>
+                        </div>
+
+                        <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>⏱️ Remaining Effort Required</div>
+                          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                            {goalAnalyses[selectedGoalForDetail.id].remainingEffort}
+                          </div>
+                        </div>
+
+                        <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🔗 Relationships with Other Goals</div>
+                          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                            {goalAnalyses[selectedGoalForDetail.id].relationships}
+                          </div>
+                        </div>
+
+                        <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🛡️ Recovery Recommendations</div>
+                          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                            {goalAnalyses[selectedGoalForDetail.id].recoveryRecommendations}
+                          </p>
+                        </div>
+
+                        {goalAnalyses[selectedGoalForDetail.id].milestoneAnalysis && goalAnalyses[selectedGoalForDetail.id].milestoneAnalysis.length > 0 && (
+                          <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '8px' }}>🎯 Milestone Analysis & Suggested Subtasks</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {goalAnalyses[selectedGoalForDetail.id].milestoneAnalysis.map((ma: any, idx: number) => (
+                                <div key={idx} style={{ borderBottom: idx < goalAnalyses[selectedGoalForDetail.id].milestoneAnalysis.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingBottom: '8px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>{ma.milestone}</span>
+                                    <span style={{ 
+                                      fontSize: '10px', 
+                                      padding: '2px 6px', 
+                                      borderRadius: '4px',
+                                      fontWeight: 'bold',
+                                      background: ma.status === 'On Track' ? 'rgba(16,185,129,0.1)' : ma.status === 'At Risk' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)',
+                                      color: ma.status === 'On Track' ? 'var(--accent-green)' : ma.status === 'At Risk' ? 'var(--accent-red)' : 'var(--text-secondary)'
+                                    }}>{ma.status}</span>
+                                  </div>
+                                  {ma.suggestions && ma.suggestions.length > 0 && (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '8px', marginTop: '6px' }}>
+                                      {ma.suggestions.map((sug: string, sIdx: number) => (
+                                        <div key={sIdx} style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span>• {sug}</span>
+                                          <button 
+                                            className="btn-secondary btn-xs"
+                                            onClick={async () => {
+                                              try {
+                                                const existingMilestones = selectedGoalForDetail.milestones || [];
+                                                const updatedMilestones = [...existingMilestones, { text: sug, done: false }];
+                                                await updateGoal(selectedGoalForDetail.id, { milestones: updatedMilestones });
+                                                setSelectedGoalForDetail(prev => prev ? { ...prev, milestones: updatedMilestones } : null);
+                                                alert(`Added "${sug}" as milestone!`);
+                                              } catch (e) {
+                                                alert('Failed to add milestone.');
+                                              }
+                                            }}
+                                            style={{ padding: '2px 6px', fontSize: '9px', opacity: 0.7 }}
+                                          >
+                                            + Add Milestone
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Q&A Section */}
+                    <div className="ai-qa-section" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px', marginTop: '8px' }}>
+                      <h5 style={{ marginBottom: '12px', fontWeight: 'bold' }}>Ask Nova Goal Strategist</h5>
+                      
+                      <div className="quick-questions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                        {[
+                          "Which goal is closest to completion?",
+                          "What is slowing my progress?",
+                          "Can I achieve all my goals this month?",
+                          "Give me a daily strategy for this goal",
+                          "What milestones should I add next?"
+                        ].map((q, idx) => (
+                          <button 
+                            key={idx} 
+                            className="ai-suggestion-chip" 
+                            onClick={() => handleAskGoalQuestion(q)}
+                            style={{ fontSize: '11px', padding: '4px 10px', cursor: 'pointer' }}
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Q&A History bubbles */}
+                      {goalQuestions[selectedGoalForDetail.id] && goalQuestions[selectedGoalForDetail.id].length > 0 && (
+                        <div className="qa-history-container" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
+                          {goalQuestions[selectedGoalForDetail.id].map((item, idx) => (
+                            <div key={idx} className="qa-item" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <div className="qa-question" style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '12px', alignSelf: 'flex-end', fontSize: '12px', maxWidth: '85%' }}>
+                                {item.q}
+                              </div>
+                              <div className="qa-answer" style={{ display: 'flex', gap: '8px', alignSelf: 'flex-start', maxWidth: '90%' }}>
+                                <div className="ai-avatar-inner" style={{ width: '20px', height: '20px', flexShrink: 0, marginTop: '2px' }}></div>
+                                <div className="qa-answer-bubble" style={{ background: 'rgba(59,130,246,0.03)', border: '1px solid rgba(59,130,246,0.08)', padding: '10px 12px', borderRadius: '12px', fontSize: '12px', lineHeight: '1.5', color: 'var(--text-primary)' }}>
+                                  {item.loading ? (
+                                    <div className="typing" style={{ display: 'flex', gap: '4px', padding: '4px 0' }}>
+                                      <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                      <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                      <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                    </div>
+                                  ) : (
+                                    renderMarkdown(item.a)
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Input field */}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          type="text"
+                          value={customQuestionInput}
+                          onChange={e => setCustomQuestionInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleAskGoalQuestion(customQuestionInput)}
+                          placeholder="Ask custom question about this goal..."
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            background: 'rgba(0,0,0,0.2)',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: 'var(--radius-md)',
+                            color: 'white',
+                            fontSize: '12px',
+                            outline: 'none'
+                          }}
+                        />
+                        <button 
+                          className="btn-primary btn-sm"
+                          onClick={() => handleAskGoalQuestion(customQuestionInput)}
+                          style={{ padding: '8px 16px', fontSize: '12px' }}
+                        >
+                          Ask
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Footer with Done Button */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>

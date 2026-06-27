@@ -20,7 +20,7 @@ export default function DashboardHome() {
   const { tasks, loading: tasksLoading, toggleTask, user } = useTasks();
   const { habits, loading: habitsLoading, toggleHabitDay } = useHabits();
   const { goals, loading: goalsLoading } = useGoals();
-  const { productivityScore, focusSessions } = useDataContext();
+  const { productivityScore, focusSessions, transactions, savingsGoals, financialHealthScore } = useDataContext();
 
   const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
@@ -110,6 +110,7 @@ export default function DashboardHome() {
         <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} toggleTask={toggleTask} />
         <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={todayFocusHours} streak={maxStreak} />
         <DeadlineWidgetCompact tasks={tasks} />
+        <FinanceWidgetCompact transactions={transactions} savingsGoals={savingsGoals} healthScore={financialHealthScore} />
         <GoalWidgetCompact isLoading={goalsLoading} goals={goals} />
         <HabitWidgetCompact isLoading={habitsLoading} habits={habits} toggleHabitDay={toggleHabitDay} todayIndex={todayIndex} />
         <AISuggestionsWidget activeTasks={activeTasks} />
@@ -571,6 +572,66 @@ function AchievementsCelebrationWidget({ tasks, goals, habits, focusSessions }: 
             : "✨ Brilliant work! Each achievement is a building block for your future. Keep moving forward!"
           }
         </p>
+      </div>
+    </div>
+  );
+}
+
+function FinanceWidgetCompact({ transactions, savingsGoals, healthScore }: { transactions: any[], savingsGoals: any[], healthScore: number }) {
+  const balance = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    transactions.forEach(t => {
+      const amt = Number(t.amount);
+      if (t.type === 'income') income += amt;
+      else expense += amt;
+    });
+    return income - expense;
+  }, [transactions]);
+
+  const activeGoal = savingsGoals[0];
+
+  return (
+    <div className="widget widget-goals">
+      <div className="widget-header">
+        <h4 className="widget-title">💰 Finance & Savings</h4>
+        <Link to="/finance" className="widget-link">Manage →</Link>
+      </div>
+      <div className="widget-content" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>AVAILABLE BALANCE</span>
+            <div style={{ fontSize: '20px', fontWeight: '800', fontFamily: 'var(--font-display)', marginTop: '2px' }}>
+              ₹{balance.toLocaleString()}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>HEALTH INDEX</span>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: healthScore >= 80 ? 'var(--accent-green)' : 'var(--accent-orange)', marginTop: '2px' }}>
+              {healthScore}/100
+            </div>
+          </div>
+        </div>
+
+        {activeGoal ? (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 'semibold' }}>🎯 Goal: {activeGoal.name}</span>
+              <span>{Math.round((Number(activeGoal.saved_amount) / Number(activeGoal.target_amount)) * 100)}%</span>
+            </div>
+            <div className="progress-bar-glow" style={{ height: '6px' }}>
+              <div className="progress-fill-glow" style={{ 
+                width: `${Math.min(100, Math.round((Number(activeGoal.saved_amount) / Number(activeGoal.target_amount)) * 100))}%`, 
+                background: activeGoal.color || 'var(--accent-blue)',
+                boxShadow: `0 0 8px ${activeGoal.color || 'var(--accent-blue)'}` 
+              }} />
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontStyle: 'italic', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '10px' }}>
+            No savings goals active. Set one in the Finance page to start tracking!
+          </div>
+        )}
       </div>
     </div>
   );
