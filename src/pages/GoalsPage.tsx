@@ -168,47 +168,77 @@ const CelebrationOverlay = ({ goal, onClose }: { goal: Goal, onClose: () => void
 };
 
 const getGoalStats = (goal: Goal) => {
-  if (goal.milestones && goal.milestones.length > 0) {
+  let milestoneProgress = 100;
+  const hasMilestones = goal.milestones && goal.milestones.length > 0;
+  if (hasMilestones) {
     const completedCount = goal.milestones.filter(m => m.done).length;
-    const progress = Math.round((completedCount / goal.milestones.length) * 100);
-    return {
-      totalDays: 0,
-      completedDaysCount: 0,
-      progress,
-      avgProgress: progress
-    };
+    milestoneProgress = Math.round((completedCount / goal.milestones.length) * 100);
   }
 
-  const start = goal.created_at ? new Date(goal.created_at) : new Date();
-  const end = goal.completed_by ? new Date(goal.completed_by) : new Date();
-  
-  start.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-  
-  const timeDiff = end.getTime() - start.getTime();
-  let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
-  if (totalDays <= 0) totalDays = 30;
-  
-  const completedDaysCount = goal.completed_dates?.length || 0;
-  
-  let progress = 0;
-  if (totalDays > 0) {
-    progress = Math.min(100, Math.round((completedDaysCount / totalDays) * 100));
+  let calendarProgress = 100;
+  const hasTargetDate = !!goal.completed_by;
+  let totalDays = 0;
+  let completedDaysCount = goal.completed_dates?.length || 0;
+
+  if (hasTargetDate) {
+    const start = goal.created_at ? new Date(goal.created_at) : new Date();
+    const end = new Date(goal.completed_by);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+
+    const timeDiff = end.getTime() - start.getTime();
+    totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    if (totalDays <= 0) totalDays = 1;
+
+    // Get expected dates range
+    const requiredDates = [];
+    const curr = new Date(start);
+    const target = new Date(end);
+    if (!isNaN(curr.getTime()) && !isNaN(target.getTime()) && curr <= target) {
+      let count = 0;
+      while (curr <= target && count < 2000) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        requiredDates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+        count++;
+      }
+    }
+
+    if (requiredDates.length > 0) {
+      const completedSet = new Set(goal.completed_dates || []);
+      const completedRequiredCount = requiredDates.filter(dateStr => completedSet.has(dateStr)).length;
+      calendarProgress = Math.round((completedRequiredCount / requiredDates.length) * 100);
+    } else {
+      calendarProgress = Math.min(100, Math.round((completedDaysCount / totalDays) * 100));
+    }
+  } else if (!hasMilestones) {
+    const start = goal.created_at ? new Date(goal.created_at) : new Date();
+    start.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const timeDiff = today.getTime() - start.getTime();
+    let totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    if (totalDays <= 0) totalDays = 30;
+
+    calendarProgress = Math.min(100, Math.round((completedDaysCount / totalDays) * 100));
   }
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const elapsedDiff = today.getTime() - start.getTime();
-  let elapsedDays = Math.ceil(elapsedDiff / (1000 * 3600 * 24));
-  if (elapsedDays <= 0) elapsedDays = 1;
-  
-  const avgProgress = progress;
-  
+
+  let progress = 0;
+  if (hasMilestones && hasTargetDate) {
+    progress = Math.min(milestoneProgress, calendarProgress);
+  } else if (hasMilestones) {
+    progress = milestoneProgress;
+  } else {
+    progress = calendarProgress;
+  }
+
   return {
-    totalDays,
-    completedDaysCount,
+    totalDays: hasTargetDate ? totalDays : 0,
+    completedDaysCount: hasTargetDate ? completedDaysCount : 0,
     progress,
-    avgProgress
+    avgProgress: progress
   };
 };
 

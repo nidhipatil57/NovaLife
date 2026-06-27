@@ -666,8 +666,29 @@ export default function CalendarPage() {
       <div className="page-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '20px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div>
-            <h2>📅 <span className="gradient-text">Calendar</span></h2>
-            <p>AI-powered scheduling — auto time-blocking, conflict detection, and smart planning.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0 }}>📅 <span className="gradient-text">Calendar</span></h2>
+              {user?.hasGoogleCalendar && (
+                <div className="gcal-status-badge" style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  color: '#10b981',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.1)',
+                  position: 'relative'
+                }}>
+                  <span className="green-lighting-dot" />
+                  Google Calendar is connected. All data and events are synced
+                </div>
+              )}
+            </div>
+            <p style={{ marginTop: '4px' }}>AI-powered scheduling — auto time-blocking, conflict detection, and smart planning.</p>
           </div>
           <button className="btn-primary btn-sm" onClick={handleAddBlockClick}>+ Block Time</button>
         </div>
