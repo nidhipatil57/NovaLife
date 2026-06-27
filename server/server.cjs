@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Neon PostgreSQL Connection Pool
 const pool = new Pool({
@@ -54,6 +55,13 @@ pool.connect(async (err, client, release) => {
           ALTER TABLE goals ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN DEFAULT FALSE;
           ALTER TABLE habits ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
           ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT 'Student | Aspiring Developer | Productivity Enthusiast';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'Asia/Kolkata (IST)';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation TEXT DEFAULT 'Student';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_focus_target INTEGER DEFAULT 20;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_task_target INTEGER DEFAULT 5;
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_coach_tone TEXT DEFAULT 'Motivational';
           ALTER TABLE events ADD COLUMN IF NOT EXISTS google_event_id VARCHAR(255);
           
           CREATE TABLE IF NOT EXISTS focus_sessions (
@@ -485,7 +493,7 @@ app.post('/api/auth/google/disconnect', authenticateToken, async (req, res) => {
 // Get Current Logged-in User Profile
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, google_refresh_token FROM users WHERE id = $1', [req.user.id]);
+    const result = await pool.query('SELECT id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -496,11 +504,124 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         uid: String(user.id),
         email: user.email,
         displayName: user.name,
+        bio: user.bio || '',
+        timezone: user.timezone || 'Asia/Kolkata (IST)',
+        avatarUrl: user.avatar_url || null,
+        occupation: user.occupation || 'Student',
+        weeklyFocusTarget: user.weekly_focus_target || 20,
+        dailyTaskTarget: user.daily_task_target || 5,
+        aiCoachTone: user.ai_coach_tone || 'Motivational',
         hasGoogleCalendar: !!user.google_refresh_token
       },
     });
   } catch (err) {
     console.error('Fetch me error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Update User Profile (displayName, bio, timezone, avatarUrl, occupation, weeklyFocusTarget, dailyTaskTarget, aiCoachTone)
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  const { displayName, bio, timezone, avatarUrl, occupation, weeklyFocusTarget, dailyTaskTarget, aiCoachTone } = req.body;
+  if (!displayName) {
+    return res.status(400).json({ error: 'Display Name is required.' });
+  }
+
+  try {
+    let currentAvatarUrl = null;
+    if (avatarUrl === undefined) {
+      const userRes = await pool.query('SELECT avatar_url FROM users WHERE id = $1', [req.user.id]);
+      currentAvatarUrl = userRes.rows[0]?.avatar_url;
+    } else {
+      currentAvatarUrl = avatarUrl;
+    }
+
+    const userRes = await pool.query('SELECT occupation, weekly_focus_target, daily_task_target, ai_coach_tone FROM users WHERE id = $1', [req.user.id]);
+    const currentInfo = userRes.rows[0] || {};
+
+    const finalOccupation = occupation !== undefined ? occupation : (currentInfo.occupation || 'Student');
+    const finalWeeklyFocus = weeklyFocusTarget !== undefined ? parseInt(weeklyFocusTarget) : (currentInfo.weekly_focus_target || 20);
+    const finalDailyTask = dailyTaskTarget !== undefined ? parseInt(dailyTaskTarget) : (currentInfo.daily_task_target || 5);
+    const finalAiCoach = aiCoachTone !== undefined ? aiCoachTone : (currentInfo.ai_coach_tone || 'Motivational');
+
+    const result = await pool.query(
+      `UPDATE users 
+       SET name = $1, bio = $2, timezone = $3, avatar_url = $4, occupation = $5, weekly_focus_target = $6, daily_task_target = $7, ai_coach_tone = $8 
+       WHERE id = $9 
+       RETURNING id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone`,
+      [displayName, bio || '', timezone || 'Asia/Kolkata (IST)', currentAvatarUrl, finalOccupation, finalWeeklyFocus, finalDailyTask, finalAiCoach, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      message: 'Profile updated successfully.',
+      user: {
+        uid: String(user.id),
+        email: user.email,
+        displayName: user.name,
+        bio: user.bio,
+        timezone: user.timezone,
+        avatarUrl: user.avatar_url || null,
+        occupation: user.occupation,
+        weeklyFocusTarget: user.weekly_focus_target,
+        dailyTaskTarget: user.daily_task_target,
+        aiCoachTone: user.ai_coach_tone,
+        hasGoogleCalendar: !!user.google_refresh_token
+      }
+    });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Change Password
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required.' });
+  }
+
+  try {
+    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const user = result.rows[0];
+    if (!user.password_hash) {
+      return res.status(400).json({ error: 'Google users do not have a local password. Please use Google Sign-In.' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Incorrect current password.' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
+
+    res.json({ message: 'Password updated successfully.' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Delete Account
+app.delete('/api/auth/delete-account', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.user.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    res.json({ message: 'Account deleted successfully.' });
+  } catch (err) {
+    console.error('Delete account error:', err);
     res.status(500).json({ error: 'Internal server error.' });
   }
 });

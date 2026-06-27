@@ -38,6 +38,15 @@ function ScrollToTop() {
 }
 
 function App() {
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('novalife_theme') || 'Dark';
+    if (savedTheme === 'Light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }, []);
+
   return (
     <Router>
       <ScrollToTop />

@@ -41,7 +41,6 @@ function Sidebar() {
           <div className="user-avatar-small">N</div>
           <div>
             <div className="user-name">Nidhi</div>
-            <div className="user-plan">Pro Plan</div>
           </div>
         </div>
       </div>
