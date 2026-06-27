@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarEvents, type CalendarEvent } from '../hooks/useCalendarEvents';
 import { useTasks } from '../hooks/useTasks';
+import { useDataContext } from '../context/DataContext';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import './CalendarPage.css';
 
@@ -64,7 +65,45 @@ const getEmojiForType = (type: string) => {
 export default function CalendarPage() {
   const { events, loading: eventsLoading, addEvent, deleteEvent, updateEvent, user } = useCalendarEvents();
   const { tasks, loading: tasksLoading } = useTasks();
+  const { goals } = useDataContext();
   const navigate = useNavigate();
+
+  const isGoalTickedTimeline = (() => {
+    const goalsWithDeadlines = goals.filter(g => g.completed_by);
+    if (goalsWithDeadlines.length === 0) return false;
+    
+    for (const goal of goalsWithDeadlines) {
+      if (!goal.completed_by) continue;
+      const start = goal.created_at ? new Date(goal.created_at) : new Date();
+      const end = new Date(goal.completed_by);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+      
+      const requiredDates: string[] = [];
+      const curr = new Date(start);
+      const target = new Date(end);
+      if (!isNaN(curr.getTime()) && !isNaN(target.getTime()) && curr <= target) {
+        let count = 0;
+        while (curr <= target && count < 2000) {
+          const y = curr.getFullYear();
+          const m = String(curr.getMonth() + 1).padStart(2, '0');
+          const d = String(curr.getDate()).padStart(2, '0');
+          requiredDates.push(`${y}-${m}-${d}`);
+          curr.setDate(curr.getDate() + 1);
+          count++;
+        }
+      }
+      
+      if (requiredDates.length > 0) {
+        const completedSet = new Set(goal.completed_dates || []);
+        const allTicked = requiredDates.every(dateStr => completedSet.has(dateStr));
+        if (!allTicked) return false;
+      } else {
+        return false;
+      }
+    }
+    return true;
+  })();
   
   const [view, setView] = useState<'week' | 'month' | 'day'>('week');
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
@@ -668,7 +707,7 @@ export default function CalendarPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0 }}>📅 <span className="gradient-text">Calendar</span></h2>
-              {user?.hasGoogleCalendar && (
+              {user?.hasGoogleCalendar && isGoalTickedTimeline && (
                 <div className="gcal-status-badge" style={{
                   display: 'inline-flex',
                   alignItems: 'center',

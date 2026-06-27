@@ -25,13 +25,18 @@ import SettingsPage from './pages/SettingsPage';
 import AIAssistantPage from './pages/AIAssistantPage';
 import BrainDumpPage from './pages/BrainDumpPage';
 import RescueModePage from './pages/RescueModePage';
+import FinancePage from './pages/FinancePage';
 
 
 function ScrollToTop() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
+    // Only scroll outer window to top for public landing/auth pages
+    const publicPaths = ['/', '/login', '/signup'];
+    if (publicPaths.includes(pathname)) {
+      window.scrollTo(0, 0);
+    }
   }, [pathname]);
 
   return null;
@@ -65,6 +70,7 @@ function App() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/goals" element={<GoalsPage />} />
           <Route path="/habits" element={<HabitsPage />} />
+          <Route path="/finance" element={<FinancePage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/focus" element={<FocusPage />} />
           <Route path="/settings" element={<SettingsPage />} />

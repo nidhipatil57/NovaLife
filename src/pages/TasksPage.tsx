@@ -2,7 +2,50 @@ import { useState, useEffect, useRef } from 'react';
 import { useTasks, type Task } from '../hooks/useTasks';
 import { parseTaskDueDate } from '../utils/dateParser';
 import { useDataContext } from '../context/DataContext';
+import { streamGeminiContent } from '../utils/aiClient';
 import './TasksPage.css';
+
+const renderMarkdown = (text: string) => {
+  return text.split('\n').map((line, i) => {
+    const isBullet = line.trim().startsWith('•') || line.trim().startsWith('-') || line.trim().startsWith('*');
+    let lineContent = line;
+    if (isBullet) {
+      lineContent = line.replace(/^[•\-*]\s*/, '');
+    }
+
+    const renderedContent: React.ReactNode[] = [];
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = boldRegex.exec(lineContent)) !== null) {
+      if (match.index > lastIndex) {
+        renderedContent.push(lineContent.substring(lastIndex, match.index));
+      }
+      renderedContent.push(<strong key={match.index}>{match[1]}</strong>);
+      lastIndex = boldRegex.lastIndex;
+    }
+    if (lastIndex < lineContent.length) {
+      renderedContent.push(lineContent.substring(lastIndex));
+    }
+
+    const finalContent = renderedContent.length > 0 ? renderedContent : lineContent;
+
+    if (isBullet) {
+      return (
+        <li key={i} style={{ marginLeft: '16px', listStyleType: 'disc', marginBottom: '6px' }}>
+          {finalContent}
+        </li>
+      );
+    }
+
+    return (
+      <div key={i} style={{ minHeight: '18px', marginBottom: line.trim() === '' ? '12px' : '4px' }}>
+        {finalContent}
+      </div>
+    );
+  });
+};
 
 const isOverdue = (task: Task) => {
   if (task.done) return false;
@@ -130,7 +173,7 @@ function CustomSelect({
 
 export default function TasksPage() {
   const { tasks, loading, user, addTask, toggleTask, deleteTask, updateTask } = useTasks();
-  const { addFocusSession } = useDataContext();
+  const { addFocusSession, focusSessions, goals, habits } = useDataContext();
   
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
@@ -179,7 +222,163 @@ export default function TasksPage() {
   const activeTask = selectedTask ? (tasks.find(t => t.id === selectedTask.id) || selectedTask) : null;
 
   // Detail Panel Tabs
-  const [activeTab, setActiveTab] = useState<'subtasks' | 'timer' | 'notes' | 'activity'>('subtasks');
+  const [activeTab, setActiveTab] = useState<'subtasks' | 'timer' | 'notes' | 'activity' | 'ai'>('subtasks');
+
+  // AI Assistant Tab States
+  const [taskAnalyses, setTaskAnalyses] = useState<Record<string, any>>({});
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [taskQuestions, setTaskQuestions] = useState<Record<string, { q: string; a: string; loading: boolean }[]>>({});
+  const [customQuestionInput, setCustomQuestionInput] = useState('');
+
+  // Trigger task analysis automatically when the AI tab is open for a task
+  useEffect(() => {
+    if (activeTab === 'ai' && activeTask && !taskAnalyses[activeTask.id] && !loadingAnalysis) {
+      runTaskAnalysis(activeTask);
+    }
+  }, [activeTab, activeTask?.id]);
+
+  const runTaskAnalysis = async (task: any) => {
+    setLoadingAnalysis(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API key is not configured');
+
+      const systemPrompt = `You are "Nova", an elite productivity coach. Analyze the following task:
+- Task: "${task.text}"
+- Category: "${task.category}"
+- Due Date: "${task.due}"
+- Priority: "${task.priority}"
+- Subtasks: ${JSON.stringify(task.subtasks || [])}
+- Notes: "${task.notes || ''}"
+
+Context of other tasks: ${JSON.stringify(tasks.filter(t => t.id !== task.id).map(t => ({ text: t.text, due: t.due, done: t.done })))}.
+Context of focus sessions: ${JSON.stringify(focusSessions.slice(0, 10).map(s => ({ name: s.name, duration: s.duration })))}.
+
+Provide an intelligent, structured evaluation of this task.
+You MUST respond with a JSON object exactly matching this schema. Do not write any explanations outside the JSON object. Do not wrap the JSON in markdown formatting.
+
+{
+  "estimatedTime": "Estimated time required, e.g. 2.5 hours",
+  "complexity": "Simple" | "Medium" | "Complex",
+  "probability": "Percentage probability of completing before due date, e.g. 90%",
+  "recommendedStartDate": "Date or day suggestion, e.g. June 29",
+  "bestTimeOfDay": "Best time of day to work on this, e.g. Morning (9 AM - 11 AM)",
+  "dependencies": "Related tasks or 'None'",
+  "subtasks": ["subtask 1", "subtask 2", ...],
+  "procrastinationRisk": "Assessment of procrastination (postponements/ignores) and a concrete recovery plan"
+}
+`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      const parsed = JSON.parse(text.trim());
+      
+      setTaskAnalyses(prev => ({
+        ...prev,
+        [task.id]: parsed
+      }));
+    } catch (err) {
+      console.error('Task analysis failed:', err);
+      setTaskAnalyses(prev => ({
+        ...prev,
+        [task.id]: {
+          error: true,
+          estimatedTime: 'Unknown',
+          complexity: 'Medium',
+          probability: '50%',
+          recommendedStartDate: 'Today',
+          bestTimeOfDay: 'Anytime',
+          dependencies: 'None',
+          subtasks: [],
+          procrastinationRisk: 'Unable to evaluate task procrastination due to connection issues.'
+        }
+      }));
+    } finally {
+      setLoadingAnalysis(false);
+    }
+  };
+
+  const handleAskTaskQuestion = async (questionText: string) => {
+    if (!activeTask || !questionText.trim()) return;
+
+    const questionTextTrimmed = questionText.trim();
+    const newEntry = { q: questionTextTrimmed, a: '', loading: true };
+    
+    setTaskQuestions(prev => {
+      const existing = prev[activeTask.id] || [];
+      return {
+        ...prev,
+        [activeTask.id]: [...existing, newEntry]
+      };
+    });
+    setCustomQuestionInput('');
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API key is not configured');
+
+      const systemPrompt = `You are "Nova", an elite productivity coach. Help the user with a question about their task: "${activeTask.text}" (Priority: ${activeTask.priority}, Due: ${activeTask.due}).
+Here is their other data:
+- Focus sessions: ${JSON.stringify(focusSessions.slice(0, 5))}
+- Goals: ${JSON.stringify(goals.slice(0, 5).map(g => g.name))}
+- Habits: ${JSON.stringify(habits.slice(0, 5).map(h => h.name))}
+
+Answer the question in a friendly, conversational, yet highly tactical way. Frame task priorities as full sentences (never say '[MEDIUM]'). Do not use markdown headers (#, ##). Write 1-2 concise, premium paragraphs. Use lists only for distinct recommendations.
+
+Question: "${questionTextTrimmed}"`;
+
+      const requestBody = {
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt }] }
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        }
+      };
+
+      let accumulatedText = '';
+      const onChunk = (chunk: string) => {
+        accumulatedText += chunk;
+        setTaskQuestions(prev => {
+          const list = prev[activeTask.id] || [];
+          return {
+            ...prev,
+            [activeTask.id]: list.map(item => 
+              item.q === questionTextTrimmed ? { ...item, a: accumulatedText, loading: false } : item
+            )
+          };
+        });
+      };
+
+      await streamGeminiContent(apiKey, requestBody, onChunk);
+
+    } catch (err: any) {
+      console.error('Task Q&A failed:', err);
+      setTaskQuestions(prev => {
+        const list = prev[activeTask.id] || [];
+        return {
+          ...prev,
+          [activeTask.id]: list.map(item => 
+            item.q === questionTextTrimmed ? { ...item, a: `⚠️ Failed to get answer: ${err.message || 'Connection error'}`, loading: false } : item
+          )
+        };
+      });
+    }
+  };
 
   // Detail Panel Snooze Dropdown
   const [showSnoozeDropdown, setShowSnoozeDropdown] = useState(false);
@@ -600,7 +799,7 @@ export default function TasksPage() {
 
       const risk = newPriority === 'critical' ? 85 : newPriority === 'high' ? 60 : 20;
 
-      await addTask({
+      const createdTask = await addTask({
         text: newText,
         done: false,
         priority: newPriority,
@@ -613,6 +812,11 @@ export default function TasksPage() {
         sessionsCount: 0,
         activityLog: [{ action: 'Task created', timestamp: new Date().toISOString() }]
       });
+
+      if (createdTask) {
+        // Run AI analysis automatically in the background
+        runTaskAnalysis(createdTask);
+      }
 
       setNewText('');
       setNewPriority('medium');
@@ -1161,6 +1365,9 @@ export default function TasksPage() {
                   <button className={activeTab === 'activity' ? 'active' : ''} onClick={() => setActiveTab('activity')}>
                     🕒 Activity Log
                   </button>
+                  <button className={activeTab === 'ai' ? 'active' : ''} onClick={() => setActiveTab('ai')}>
+                    🤖 AI Coach
+                  </button>
                 </div>
 
                 {/* Tab content areas */}
@@ -1553,6 +1760,194 @@ export default function TasksPage() {
                         ))
                       )}
                     </div>
+                  </div>
+                )}
+
+                {activeTab === 'ai' && (
+                  <div className="tab-content-container ai-task-coach-view" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {loadingAnalysis && !taskAnalyses[activeTask.id] ? (
+                      <div className="ai-loading-panel" style={{ textAlign: 'center', padding: '30px' }}>
+                        <div className="ai-onboard-avatar" style={{ margin: '0 auto 16px auto', width: '36px', height: '36px' }}></div>
+                        <p style={{ fontSize: 'var(--text-sm)' }}>Nova is evaluating your task complexity, dependencies, and focus hours...</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Dynamic Analysis Cards */}
+                        {taskAnalyses[activeTask.id] && (
+                          <div className="ai-analysis-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>⏱️ Real Time Estimate</div>
+                              <div style={{ fontSize: 'var(--text-base)', fontWeight: 'bold', color: 'var(--accent-blue-light)' }}>
+                                {taskAnalyses[activeTask.id].estimatedTime}
+                              </div>
+                            </div>
+                            
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>⚡ Complexity</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span className="complexity-badge" style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  background: taskAnalyses[activeTask.id].complexity === 'Simple' ? 'rgba(16,185,129,0.1)' : taskAnalyses[activeTask.id].complexity === 'Medium' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                                  color: taskAnalyses[activeTask.id].complexity === 'Simple' ? 'var(--accent-green)' : taskAnalyses[activeTask.id].complexity === 'Medium' ? '#F59E0B' : 'var(--accent-red)'
+                                }}>
+                                  {taskAnalyses[activeTask.id].complexity}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>📈 Completion Probability</div>
+                              <div style={{ fontSize: 'var(--text-base)', fontWeight: 'bold', color: 'var(--accent-green)' }}>
+                                {taskAnalyses[activeTask.id].probability}
+                              </div>
+                            </div>
+
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🌅 Ideal Start Date</div>
+                              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'semibold', color: 'var(--text-primary)' }}>
+                                {taskAnalyses[activeTask.id].recommendedStartDate}
+                              </div>
+                            </div>
+
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🎧 Best Focus Time Window</div>
+                              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+                                {taskAnalyses[activeTask.id].bestTimeOfDay}
+                              </div>
+                            </div>
+
+                            {taskAnalyses[activeTask.id].dependencies && taskAnalyses[activeTask.id].dependencies !== 'None' && (
+                              <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🔗 Dependencies Detected</div>
+                                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--accent-blue-light)' }}>
+                                  {taskAnalyses[activeTask.id].dependencies}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>🛡️ Procrastination Risk & Recovery Plan</div>
+                              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.5' }}>
+                                {taskAnalyses[activeTask.id].procrastinationRisk}
+                              </p>
+                            </div>
+
+                            {taskAnalyses[activeTask.id].subtasks && taskAnalyses[activeTask.id].subtasks.length > 0 && (
+                              <div className="analysis-card widget glass-card-static" style={{ padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)', gridColumn: 'span 2' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Logical Action Breakdown</div>
+                                  <button 
+                                    className="btn-secondary btn-xs"
+                                    onClick={async () => {
+                                      try {
+                                        const newSubtasks = taskAnalyses[activeTask.id].subtasks.map((text: string) => ({ text, done: false }));
+                                        const combinedSubtasks = [...(activeTask.subtasks || []), ...newSubtasks];
+                                        await updateTask(activeTask.id, { subtasks: combinedSubtasks });
+                                        showToast(`Imported ${newSubtasks.length} subtasks!`, 'success');
+                                      } catch (e) {
+                                        showToast('Failed to import subtasks', 'warning');
+                                      }
+                                    }}
+                                  >
+                                    📥 Import to Checklist
+                                  </button>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  {taskAnalyses[activeTask.id].subtasks.map((st: string, idx: number) => (
+                                    <div key={idx} style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '6px' }}>
+                                      <span>{idx + 1}.</span>
+                                      <span>{st}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Q&A Section */}
+                        <div className="ai-qa-section" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px', marginTop: '8px' }}>
+                          <h5 style={{ marginBottom: '12px', fontWeight: 'bold' }}>Ask Nova Task Strategist</h5>
+                          
+                          <div className="quick-questions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                            {[
+                              "What should I do next?",
+                              "Which task should I finish first?",
+                              "Can I finish everything before Friday?",
+                              "What happens if I skip today's work?",
+                              "Can you simplify this task?"
+                            ].map((q, idx) => (
+                              <button 
+                                key={idx} 
+                                className="ai-suggestion-chip" 
+                                onClick={() => handleAskTaskQuestion(q)}
+                                style={{ fontSize: '11px', padding: '4px 10px', cursor: 'pointer' }}
+                              >
+                                {q}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Q&A History bubbles */}
+                          {taskQuestions[activeTask.id] && taskQuestions[activeTask.id].length > 0 && (
+                            <div className="qa-history-container" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
+                              {taskQuestions[activeTask.id].map((item, idx) => (
+                                <div key={idx} className="qa-item" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <div className="qa-question" style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '12px', alignSelf: 'flex-end', fontSize: '12px', maxWidth: '85%' }}>
+                                    {item.q}
+                                  </div>
+                                  <div className="qa-answer" style={{ display: 'flex', gap: '8px', alignSelf: 'flex-start', maxWidth: '90%' }}>
+                                    <div className="ai-avatar-inner" style={{ width: '20px', height: '20px', flexShrink: 0, marginTop: '2px' }}></div>
+                                    <div className="qa-answer-bubble" style={{ background: 'rgba(59,130,246,0.03)', border: '1px solid rgba(59,130,246,0.08)', padding: '10px 12px', borderRadius: '12px', fontSize: '12px', lineHeight: '1.5' }}>
+                                      {item.loading ? (
+                                        <div className="typing" style={{ display: 'flex', gap: '4px', padding: '4px 0' }}>
+                                          <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                          <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                          <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
+                                        </div>
+                                      ) : (
+                                        renderMarkdown(item.a)
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Input field */}
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <input 
+                              type="text"
+                              value={customQuestionInput}
+                              onChange={e => setCustomQuestionInput(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleAskTaskQuestion(customQuestionInput)}
+                              placeholder="Ask custom question about this task..."
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                background: 'rgba(0,0,0,0.2)',
+                                border: '1px solid var(--glass-border)',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'white',
+                                fontSize: '12px',
+                                outline: 'none'
+                              }}
+                            />
+                            <button 
+                              className="btn-primary btn-sm"
+                              onClick={() => handleAskTaskQuestion(customQuestionInput)}
+                              style={{ padding: '8px 16px', fontSize: '12px' }}
+                            >
+                              Ask
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

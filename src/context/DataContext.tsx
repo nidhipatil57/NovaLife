@@ -29,10 +29,61 @@ export interface Message {
   created_at: string;
 }
 
+export interface Transaction {
+  id: string;
+  user_id: number;
+  type: 'income' | 'expense';
+  amount: number;
+  category: string;
+  date: string;
+  time: string;
+  merchant: string;
+  payment_method: string;
+  notes: string;
+  recurring: boolean;
+  recurring_frequency: string;
+  tags: string[];
+  receipt_url: string;
+  created_at?: string;
+}
+
+export interface Budget {
+  id: string;
+  user_id: number;
+  category: string;
+  amount: number;
+  month_year: string;
+  created_at?: string;
+}
+
+export interface SavingsGoal {
+  id: string;
+  user_id: number;
+  name: string;
+  target_amount: number;
+  saved_amount: number;
+  target_date: string;
+  color: string;
+  notes: string;
+  created_at?: string;
+}
+
+export interface Bill {
+  id: string;
+  user_id: number;
+  title: string;
+  amount: number;
+  due_date: string;
+  category: string;
+  paid: boolean;
+  recurring: boolean;
+  created_at?: string;
+}
+
 interface DataContextType {
   tasks: Task[];
   loadingTasks: boolean;
-  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<void>;
+  addTask: (task: Omit<Task, 'id' | 'createdAt'>) => Promise<Task | undefined>;
   updateTask: (id: string, updates: Partial<Omit<Task, 'id' | 'createdAt'>>) => Promise<Task | undefined>;
   toggleTask: (id: string, done: boolean, skipSync?: boolean) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
@@ -79,6 +130,44 @@ interface DataContextType {
   productivityScore: number;
   rescueActivations: number;
   triggerRescueActivation: () => void;
+
+  // AI Assistant Preserved State
+  aiActiveConvId: string | null;
+  setAiActiveConvId: (id: string | null) => void;
+  aiMessages: Message[];
+  setAiMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  aiInput: string;
+  setAiInput: (val: string) => void;
+  aiSearchQuery: string;
+  setAiSearchQuery: (val: string) => void;
+  aiScrollTop: number;
+  setAiScrollTop: (val: number) => void;
+
+  // Finance
+  transactions: Transaction[];
+  loadingTransactions: boolean;
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'user_id'>) => Promise<Transaction | undefined>;
+  updateTransaction: (id: string, updates: Partial<Omit<Transaction, 'id' | 'user_id'>>) => Promise<Transaction | undefined>;
+  deleteTransaction: (id: string) => Promise<void>;
+
+  budgets: Budget[];
+  loadingBudgets: boolean;
+  addBudget: (budget: Omit<Budget, 'id' | 'user_id'>) => Promise<Budget | undefined>;
+  deleteBudget: (id: string) => Promise<void>;
+
+  savingsGoals: SavingsGoal[];
+  loadingSavingsGoals: boolean;
+  addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'user_id'>) => Promise<SavingsGoal | undefined>;
+  updateSavingsGoal: (id: string, updates: Partial<Omit<SavingsGoal, 'id' | 'user_id'>>) => Promise<SavingsGoal | undefined>;
+  deleteSavingsGoal: (id: string) => Promise<void>;
+
+  bills: Bill[];
+  loadingBills: boolean;
+  addBill: (bill: Omit<Bill, 'id' | 'user_id'>) => Promise<Bill | undefined>;
+  updateBill: (id: string, updates: Partial<Omit<Bill, 'id' | 'user_id'>>) => Promise<Bill | undefined>;
+  deleteBill: (id: string) => Promise<void>;
+
+  financialHealthScore: number;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -109,6 +198,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Conversations state
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(true);
+
+  // AI Assistant Preserved State
+  const [aiActiveConvId, setAiActiveConvId] = useState<string | null>(null);
+  const [aiMessages, setAiMessages] = useState<Message[]>([]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiSearchQuery, setAiSearchQuery] = useState('');
+  const [aiScrollTop, setAiScrollTop] = useState(0);
+
+  // Finance states
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(true);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [loadingBudgets, setLoadingBudgets] = useState(true);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
+  const [loadingSavingsGoals, setLoadingSavingsGoals] = useState(true);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loadingBills, setLoadingBills] = useState(true);
 
   // Rescue Mode Activations state
   const [rescueActivations, setRescueActivations] = useState(() => {
@@ -355,6 +461,132 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     fetchConversations();
   }, [user]);
 
+  // 7. Fetch Transactions
+  useEffect(() => {
+    if (!user) {
+      setTransactions([]);
+      setLoadingTransactions(false);
+      return;
+    }
+    const fetchTransactions = async () => {
+      setLoadingTransactions(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const res = await fetch('/api/finance/transactions', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTransactions(data.map((t: any) => ({
+            ...t,
+            id: String(t.id),
+            amount: Number(t.amount),
+            tags: Array.isArray(t.tags) ? t.tags : JSON.parse(t.tags || '[]')
+          })));
+        }
+      } catch (e) {
+        console.error('Error fetching transactions:', e);
+      } finally {
+        setLoadingTransactions(false);
+      }
+    };
+    fetchTransactions();
+  }, [user]);
+
+  // 8. Fetch Budgets
+  useEffect(() => {
+    if (!user) {
+      setBudgets([]);
+      setLoadingBudgets(false);
+      return;
+    }
+    const fetchBudgets = async () => {
+      setLoadingBudgets(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const res = await fetch('/api/finance/budgets', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setBudgets(data.map((b: any) => ({
+            ...b,
+            id: String(b.id),
+            amount: Number(b.amount)
+          })));
+        }
+      } catch (e) {
+        console.error('Error fetching budgets:', e);
+      } finally {
+        setLoadingBudgets(false);
+      }
+    };
+    fetchBudgets();
+  }, [user]);
+
+  // 9. Fetch Savings Goals
+  useEffect(() => {
+    if (!user) {
+      setSavingsGoals([]);
+      setLoadingSavingsGoals(false);
+      return;
+    }
+    const fetchSavingsGoals = async () => {
+      setLoadingSavingsGoals(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const res = await fetch('/api/finance/savings-goals', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSavingsGoals(data.map((g: any) => ({
+            ...g,
+            id: String(g.id),
+            target_amount: Number(g.target_amount),
+            saved_amount: Number(g.saved_amount)
+          })));
+        }
+      } catch (e) {
+        console.error('Error fetching savings goals:', e);
+      } finally {
+        setLoadingSavingsGoals(false);
+      }
+    };
+    fetchSavingsGoals();
+  }, [user]);
+
+  // 10. Fetch Bills
+  useEffect(() => {
+    if (!user) {
+      setBills([]);
+      setLoadingBills(false);
+      return;
+    }
+    const fetchBills = async () => {
+      setLoadingBills(true);
+      try {
+        const token = localStorage.getItem('novalife_token');
+        const res = await fetch('/api/finance/bills', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setBills(data.map((b: any) => ({
+            ...b,
+            id: String(b.id),
+            amount: Number(b.amount)
+          })));
+        }
+      } catch (e) {
+        console.error('Error fetching bills:', e);
+      } finally {
+        setLoadingBills(false);
+      }
+    };
+    fetchBills();
+  }, [user]);
+
   // Task Actions
   const addTask = async (task: Omit<Task, 'id' | 'createdAt'>) => {
     if (!user) return;
@@ -400,6 +632,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           createdAt: t.created_at,
         };
         setTasks((prev) => [newTask, ...prev]);
+        return newTask;
       }
     } catch (err) {
       console.error('Error adding task:', err);
@@ -683,15 +916,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     milestones?: { text: string; done: boolean }[];
   }) => {
     let milestoneProgress = 100;
-    const hasMilestones = goal.milestones && goal.milestones.length > 0;
-    if (hasMilestones) {
+    const hasMilestones = !!(goal.milestones && goal.milestones.length > 0);
+    if (hasMilestones && goal.milestones) {
       const completedCount = goal.milestones.filter(m => m.done).length;
       milestoneProgress = Math.round((completedCount / goal.milestones.length) * 100);
     }
 
     let calendarProgress = 100;
     const hasTargetDate = !!goal.completed_by;
-    if (hasTargetDate) {
+    if (hasTargetDate && goal.completed_by) {
       const start = goal.created_at ? new Date(goal.created_at) : new Date();
       const end = new Date(goal.completed_by);
       start.setHours(0, 0, 0, 0);
@@ -1078,10 +1311,340 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return undefined;
   };
 
-  // Central Productivity Scoring Engine (recalculates automatically on any activity update)
+  // Finance CRUD Actions
+  const addTransaction = async (tData: Omit<Transaction, 'id' | 'user_id'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/finance/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(tData)
+      });
+      if (res.ok) {
+        const added = await res.json();
+        const mapped = {
+          ...added,
+          id: String(added.id),
+          amount: Number(added.amount),
+          tags: Array.isArray(added.tags) ? added.tags : JSON.parse(added.tags || '[]')
+        };
+        setTransactions(prev => [mapped, ...prev]);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error adding transaction:', e);
+    }
+  };
+
+  const updateTransaction = async (id: string, updates: Partial<Omit<Transaction, 'id' | 'user_id'>>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/transactions/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const mapped = {
+          ...updated,
+          id: String(updated.id),
+          amount: Number(updated.amount),
+          tags: Array.isArray(updated.tags) ? updated.tags : JSON.parse(updated.tags || '[]')
+        };
+        setTransactions(prev => prev.map(t => t.id === id ? mapped : t));
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error updating transaction:', e);
+    }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/transactions/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setTransactions(prev => prev.filter(t => t.id !== id));
+      }
+    } catch (e) {
+      console.error('Error deleting transaction:', e);
+    }
+  };
+
+  const addBudget = async (bData: Omit<Budget, 'id' | 'user_id'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/finance/budgets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bData)
+      });
+      if (res.ok) {
+        const added = await res.json();
+        const mapped = {
+          ...added,
+          id: String(added.id),
+          amount: Number(added.amount)
+        };
+        setBudgets(prev => {
+          const filtered = prev.filter(b => !(b.category === mapped.category && b.month_year === mapped.month_year));
+          return [...filtered, mapped];
+        });
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error adding budget:', e);
+    }
+  };
+
+  const deleteBudget = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/budgets/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setBudgets(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (e) {
+      console.error('Error deleting budget:', e);
+    }
+  };
+
+  const addSavingsGoal = async (gData: Omit<SavingsGoal, 'id' | 'user_id'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/finance/savings-goals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(gData)
+      });
+      if (res.ok) {
+        const added = await res.json();
+        const mapped = {
+          ...added,
+          id: String(added.id),
+          target_amount: Number(added.target_amount),
+          saved_amount: Number(added.saved_amount)
+        };
+        setSavingsGoals(prev => [mapped, ...prev]);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error adding savings goal:', e);
+    }
+  };
+
+  const updateSavingsGoal = async (id: string, updates: Partial<Omit<SavingsGoal, 'id' | 'user_id'>>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/savings-goals/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const mapped = {
+          ...updated,
+          id: String(updated.id),
+          target_amount: Number(updated.target_amount),
+          saved_amount: Number(updated.saved_amount)
+        };
+        setSavingsGoals(prev => prev.map(g => g.id === id ? mapped : g));
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error updating savings goal:', e);
+    }
+  };
+
+  const deleteSavingsGoal = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/savings-goals/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setSavingsGoals(prev => prev.filter(g => g.id !== id));
+      }
+    } catch (e) {
+      console.error('Error deleting savings goal:', e);
+    }
+  };
+
+  const addBill = async (bData: Omit<Bill, 'id' | 'user_id'>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/finance/bills', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bData)
+      });
+      if (res.ok) {
+        const added = await res.json();
+        const mapped = {
+          ...added,
+          id: String(added.id),
+          amount: Number(added.amount)
+        };
+        setBills(prev => [mapped, ...prev]);
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error adding bill:', e);
+    }
+  };
+
+  const updateBill = async (id: string, updates: Partial<Omit<Bill, 'id' | 'user_id'>>) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/bills/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const mapped = {
+          ...updated,
+          id: String(updated.id),
+          amount: Number(updated.amount)
+        };
+        setBills(prev => prev.map(b => b.id === id ? mapped : b));
+        return mapped;
+      }
+    } catch (e) {
+      console.error('Error updating bill:', e);
+    }
+  };
+
+  const deleteBill = async (id: string) => {
+    if (!user) return;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch(`/api/finance/bills/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setBills(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (e) {
+      console.error('Error deleting bill:', e);
+    }
+  };
+
+  // Financial Health Score Calculation Engine
+  const financialHealthScore = useMemo(() => {
+    if (!user || transactions.length === 0) return 75; // Neutral-high base
+
+    let score = 70; // Base score
+
+    // 1. Savings Rate (Weight: 30 points)
+    const monthlyIncome = transactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+    const monthlyExpenses = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    if (monthlyIncome > 0) {
+      const savingsRate = (monthlyIncome - monthlyExpenses) / monthlyIncome;
+      if (savingsRate >= 0.3) score += 30; // Excellent savings rate (30%+)
+      else if (savingsRate >= 0.1) score += 20; // Good savings rate (10%-30%)
+      else if (savingsRate >= 0) score += 10; // Positive savings rate
+      else score -= 15; // Overspending income
+    } else if (monthlyExpenses > 0) {
+      score -= 15; // Expenses with no income
+    } else {
+      score += 15;
+    }
+
+    // 2. Budget Discipline (Weight: 30 points)
+    const currentMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+    const currentMonthBudgets = budgets.filter(b => b.month_year === currentMonthStr);
+
+    let budgetsOverspentCount = 0;
+    currentMonthBudgets.forEach(b => {
+      const spent = transactions
+        .filter(t => t.type === 'expense' && t.category === b.category && t.date.startsWith(currentMonthStr))
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      if (spent > Number(b.amount)) {
+        budgetsOverspentCount++;
+      }
+    });
+
+    if (currentMonthBudgets.length > 0) {
+      if (budgetsOverspentCount === 0) {
+        score += 30;
+      } else {
+        score += Math.max(0, 30 - (budgetsOverspentCount * 10)); // Deduct 10 points per overspent budget
+      }
+    } else {
+      score += 15; // Neutral point if no budgets defined
+    }
+
+    // 3. Bill Payment Consistency (Weight: 40 points)
+    const unpaidBills = bills.filter(b => !b.paid);
+    const missedBillsCount = unpaidBills.filter(b => {
+      const due = new Date(b.due_date);
+      return due.getTime() < Date.now();
+    }).length;
+
+    if (missedBillsCount > 0) {
+      score -= (missedBillsCount * 15); // Deduct 15 points per overdue unpaid bill
+    } else {
+      score += 40; // No overdue unpaid bills
+    }
+
+    return Math.max(0, Math.min(100, score));
+  }, [transactions, budgets, bills, user]);
+
+  // Central Productivity Scoring Engine (recalculates automatically on any activity update, blended with Financial Health)
   const productivityScore = useMemo(() => {
-    return calculateProductivityScore(tasks, habits, goals, focusSessions, events, rescueActivations);
-  }, [tasks, habits, goals, focusSessions, events, rescueActivations]);
+    const pScore = calculateProductivityScore(tasks, habits, goals, focusSessions, events, rescueActivations);
+    if (!user) return pScore;
+    // Blend 85% Productivity + 15% Financial Health
+    return Math.max(0, Math.min(100, Math.round(pScore * 0.85 + financialHealthScore * 0.15)));
+  }, [tasks, habits, goals, focusSessions, events, rescueActivations, financialHealthScore, user]);
 
   return (
     <DataContext.Provider
@@ -1123,6 +1686,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         productivityScore,
         rescueActivations,
         triggerRescueActivation,
+        aiActiveConvId,
+        setAiActiveConvId,
+        aiMessages,
+        setAiMessages,
+        aiInput,
+        setAiInput,
+        aiSearchQuery,
+        setAiSearchQuery,
+        aiScrollTop,
+        setAiScrollTop,
+        transactions,
+        loadingTransactions,
+        addTransaction,
+        updateTransaction,
+        deleteTransaction,
+        budgets,
+        loadingBudgets,
+        addBudget,
+        deleteBudget,
+        savingsGoals,
+        loadingSavingsGoals,
+        addSavingsGoal,
+        updateSavingsGoal,
+        deleteSavingsGoal,
+        bills,
+        loadingBills,
+        addBill,
+        updateBill,
+        deleteBill,
+        financialHealthScore,
       }}
     >
       {children}
