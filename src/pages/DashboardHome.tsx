@@ -20,7 +20,7 @@ export default function DashboardHome() {
   const { tasks, loading: tasksLoading, toggleTask, user } = useTasks();
   const { habits, loading: habitsLoading, toggleHabitDay } = useHabits();
   const { goals, loading: goalsLoading } = useGoals();
-  const { productivityScore, focusSessions, transactions, savingsGoals, financialHealthScore } = useDataContext();
+  const { productivityScore, focusSessions, transactions, savingsGoals, financialHealthScore, bills } = useDataContext();
 
   const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
@@ -36,7 +36,7 @@ export default function DashboardHome() {
 
   // Calculations for daily briefing
   const activeTasks = tasks.filter(t => !t.done);
-  const highPriorityCount = activeTasks.filter(t => t.priority === 'critical' || t.priority === 'high').length;
+  const highPriorityCount = activeTasks.filter(t => (t.priority === 'critical' || t.priority === 'high') && !isOverdue(t)).length;
   
   const overdueCount = activeTasks.filter(t => isOverdue(t)).length;
   const approachingCount = activeTasks.filter(t => t.due && t.due.toLowerCase().trim() !== 'no due date' && !isOverdue(t)).length;
@@ -110,7 +110,7 @@ export default function DashboardHome() {
         <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} toggleTask={toggleTask} />
         <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={todayFocusHours} streak={maxStreak} />
         <DeadlineWidgetCompact tasks={tasks} />
-        <FinanceWidgetCompact transactions={transactions} savingsGoals={savingsGoals} healthScore={financialHealthScore} />
+        <FinanceWidgetCompact transactions={transactions} savingsGoals={savingsGoals} healthScore={financialHealthScore} bills={bills} />
         <GoalWidgetCompact isLoading={goalsLoading} goals={goals} />
         <HabitWidgetCompact isLoading={habitsLoading} habits={habits} toggleHabitDay={toggleHabitDay} todayIndex={todayIndex} />
         <AISuggestionsWidget activeTasks={activeTasks} />
@@ -577,7 +577,7 @@ function AchievementsCelebrationWidget({ tasks, goals, habits, focusSessions }: 
   );
 }
 
-function FinanceWidgetCompact({ transactions, savingsGoals, healthScore }: { transactions: any[], savingsGoals: any[], healthScore: number }) {
+function FinanceWidgetCompact({ transactions, savingsGoals, healthScore, bills = [] }: { transactions: any[], savingsGoals: any[], healthScore: number, bills?: any[] }) {
   const balance = useMemo(() => {
     let income = 0;
     let expense = 0;
@@ -590,6 +590,10 @@ function FinanceWidgetCompact({ transactions, savingsGoals, healthScore }: { tra
   }, [transactions]);
 
   const activeGoal = savingsGoals[0];
+
+  const unpaidBills = useMemo(() => {
+    return bills.filter(b => !b.paid);
+  }, [bills]);
 
   return (
     <div className="widget widget-goals">
@@ -632,6 +636,19 @@ function FinanceWidgetCompact({ transactions, savingsGoals, healthScore }: { tra
             No savings goals active. Set one in the Finance page to start tracking!
           </div>
         )}
+
+        {/* Bills Reminder */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '10px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px' }}>{unpaidBills.length > 0 ? '📅' : '✅'}</span>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: '10px', fontWeight: 'bold', color: unpaidBills.length > 0 ? 'var(--accent-orange-light)' : 'var(--accent-green-light)', letterSpacing: '0.5px' }}>BILLS REMINDER</span>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              {unpaidBills.length > 0 
+                ? `You have ${unpaidBills.length} unpaid bill${unpaidBills.length > 1 ? 's' : ''} outstanding.` 
+                : 'All monthly bills paid! 🎉'}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
