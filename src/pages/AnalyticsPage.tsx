@@ -51,7 +51,7 @@ export default function AnalyticsPage() {
         if (!t.done) return false;
         
         const completionLogs = t.activityLog
-          ? t.activityLog.filter(log => log.action.toLowerCase().includes('marked as completed'))
+          ? t.activityLog.filter(log => log.action.toLowerCase().includes('completed'))
           : [];
         
         if (completionLogs.length > 0) {
