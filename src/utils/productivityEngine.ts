@@ -51,36 +51,32 @@ export function calculateProductivityScore(
     return eventDate;
   };
 
-  // Filter tasks created on or before targetDate
-  const tasksFiltered = tasks.filter(t => {
-    const created = t.createdAt ? new Date(t.createdAt) : new Date();
-    return created.getTime() <= targetTime;
-  });
+  // Filter tasks created specifically on targetDate
+  const tasksCreatedOnDay = tasks.filter(t => isTargetDay(t.createdAt));
 
-  // 1. Tasks Created (Weight: 10)
-  score += Math.min(10, tasksFiltered.length * 1.5);
+  // 1. Tasks Created on targetDate (Weight: 10)
+  score += Math.min(10, tasksCreatedOnDay.length * 1.5);
 
   // 2. Tasks Completed, Priority, and AI Recommendations Followed (Weight: 35)
-  tasksFiltered.forEach((t) => {
-    let isCompleted = false;
+  tasks.forEach((t) => {
+    let isCompletedOnDay = false;
     if (t.done) {
       // Find completion in activity log
       const completedLog = t.activityLog?.find(log => 
         log.action.toLowerCase().includes('completed') && 
-        new Date(log.timestamp).getTime() <= targetTime
+        isTargetDay(log.timestamp)
       );
       if (completedLog) {
-        isCompleted = true;
+        isCompletedOnDay = true;
       } else {
-        // Fallback: if t.createdAt is before targetTime
-        const created = t.createdAt ? new Date(t.createdAt) : new Date();
-        if (created.getTime() <= targetTime) {
-          isCompleted = true;
+        // Fallback: if t.createdAt matches targetDate
+        if (isTargetDay(t.createdAt)) {
+          isCompletedOnDay = true;
         }
       }
     }
 
-    if (isCompleted) {
+    if (isCompletedOnDay) {
       score += 10; // Base completion reward
       
       // Priority rewards
@@ -94,37 +90,88 @@ export function calculateProductivityScore(
         score += 6;
       }
     } else {
-      // 3. Overdue Tasks & Missed Deadlines
+      // 3. Overdue Tasks & Missed Deadlines on targetDate
       const dueDate = parseTaskDueDate(t.due);
-      if (dueDate && dueDate.getTime() < targetTime) {
-        score -= 12; // Penalty for past/missed deadlines
+      if (dueDate && dueDate.getTime() <= targetTime) {
+        // Only penalize if the task was not completed on or before targetDate
+        let completedBeforeOrOnTarget = false;
+        if (t.done) {
+          const completedLog = t.activityLog?.find(log => 
+            log.action.toLowerCase().includes('completed') && 
+            new Date(log.timestamp).getTime() <= targetTime
+          );
+          if (completedLog) {
+            completedBeforeOrOnTarget = true;
+          } else {
+            const created = t.createdAt ? new Date(t.createdAt) : new Date();
+            if (created.getTime() <= targetTime) {
+              completedBeforeOrOnTarget = true;
+            }
+          }
+        }
+
+        if (!completedBeforeOrOnTarget) {
+          score -= 12; // Penalty for past/missed deadlines
+        }
       }
     }
   });
 
   // 4. Goal Completion & Milestones Achieved (Weight: 20)
+  const yVal = targetDate.getFullYear();
+  const mVal = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const dVal = String(targetDate.getDate()).padStart(2, '0');
+  const targetYYYYMMDD = `${yVal}-${mVal}-${dVal}`;
+
   goals.forEach((g) => {
     const created = g.created_at ? new Date(g.created_at) : new Date();
     if (created.getTime() > targetTime) return;
 
+    // Check if goal was worked on (checked off on goal calendar) specifically on targetDate
+    const workedOnToday = g.completed_dates?.includes(targetYYYYMMDD);
+    if (workedOnToday) {
+      score += 10; // Reward for goal calendar progress today
+    }
+
     if (g.milestones && g.milestones.length > 0) {
-      g.milestones.forEach((m: any) => {
-        if (m.done) {
-          score += 4; // Points per milestone completed
+      g.milestones.forEach((milestone: any) => {
+        if (milestone.done) {
+          // Find if the matching task was completed on targetDate
+          const matchingTask = tasks.find(t => 
+            t.text.toLowerCase().trim() === milestone.text.toLowerCase().trim()
+          );
+          if (matchingTask) {
+            const completedLog = matchingTask.activityLog?.find(log => 
+              log.action.toLowerCase().includes('completed') && 
+              isTargetDay(log.timestamp)
+            );
+            if (completedLog || (isTargetDay(matchingTask.createdAt) && matchingTask.done)) {
+              score += 4; // Milestone completed today reward
+            }
+          }
         }
       });
     }
     
-    // Check if goal was completed before targetDate
-    let isGoalDone = g.progress === 100;
-    if (isGoalDone && g.completed_by) {
-      const completedTime = new Date(g.completed_by).getTime();
-      if (!isNaN(completedTime) && completedTime > targetTime) {
-        isGoalDone = false;
+    // Check if goal reached 100% completion specifically on targetDate
+    let completedToday = false;
+    if (g.progress === 100) {
+      if (g.completed_dates && g.completed_dates.length > 0) {
+        const sortedDates = [...g.completed_dates].sort();
+        if (sortedDates[sortedDates.length - 1] === targetYYYYMMDD) {
+          completedToday = true;
+        }
+      } else if (g.completed_by) {
+        const compDate = new Date(g.completed_by);
+        if (compDate.toDateString() === targetDateStr) {
+          completedToday = true;
+        }
+      } else if (isTargetDay(g.created_at)) {
+        completedToday = true;
       }
     }
-    if (isGoalDone) {
-      score += 20; // Points for goal completion
+    if (completedToday) {
+      score += 20; // Goal completed today reward
     }
   });
 
@@ -133,6 +180,10 @@ export function calculateProductivityScore(
     let targetDayOfWeek = targetDate.getDay();
     if (targetDayOfWeek === 0) targetDayOfWeek = 7;
     const targetIdx = targetDayOfWeek - 1; // 0 (Mon) to 6 (Sun)
+
+    // Direct daily completion reward
+    const completedTodayCount = habits.filter(h => h.week[targetIdx]).length;
+    score += Math.min(20, completedTodayCount * 8); // +8 points per habit completed today, max 20 points
 
     const rates = habits.map(h => {
       // Filter the week array up to the target date's weekday
@@ -152,21 +203,17 @@ export function calculateProductivityScore(
     }
   }
 
-  // Filter focus sessions on or before targetDate
-  const focusSessionsFiltered = focusSessions.filter(s => {
-    const created = s.created_at || (s as any).createdAt;
-    if (!created) return true;
-    return new Date(created).getTime() <= targetTime;
-  });
+  // Filter focus sessions specifically on targetDate
+  const focusSessionsOnDay = focusSessions.filter(s => isTargetDay(s.created_at || (s as any).createdAt));
 
   // 6. Focus Session Duration, consistency & deep work time (Weight: 20)
-  if (focusSessionsFiltered.length > 0) {
-    const totalMinutes = focusSessionsFiltered.reduce((acc, s) => acc + (s.duration || 0), 0) / 60;
-    score += Math.min(15, totalMinutes * 0.1); // +1 point per 10 mins (0.1 per min) of deep work, max 15
+  if (focusSessionsOnDay.length > 0 || focusSessions.length > 0) {
+    const totalMinutesToday = focusSessionsOnDay.reduce((acc, s) => acc + (s.duration || 0), 0) / 60;
+    score += Math.min(15, totalMinutesToday * 0.25); // +1 point per 4 mins of deep work today, max 15 points
 
     // Focus consistency: count distinct days focused in last 7 days from targetDate
     const distinctDays = new Set(
-      focusSessionsFiltered
+      focusSessions
         .filter(s => isWithinLastDays(s.created_at || (s as any).createdAt, 7))
         .map(s => new Date(s.created_at || (s as any).createdAt).toDateString())
     ).size;
@@ -178,38 +225,46 @@ export function calculateProductivityScore(
 
   // 7. Calendar checklist adherence & Skipped Focus Sessions (Weight: 10)
   events.forEach((e) => {
-    // Checklist items completed
-    if (e.prepChecklist && e.prepChecklist.length > 0) {
-      e.prepChecklist.forEach((item) => {
-        if (item.done) {
-          score += 3; // +3 points per prep checklist item completed
-        }
-      });
-    }
+    const eventDate = getEventDate(e.day, e.weekOffset || 0);
+    const isEventOnTargetDay = eventDate.toDateString() === targetDateStr;
 
-    // Skipped planned focus sessions
-    if (e.type === 'focus' || e.type === 'study') {
-      const eventDate = getEventDate(e.day, e.weekOffset || 0);
-      eventDate.setHours(Math.floor(e.start), Math.round((e.start % 1) * 60), 0, 0);
-      
-      if (eventDate.getTime() < targetTime) {
-        const hasLoggedFocusOnDay = focusSessionsFiltered.some((s) => {
-          const sessionDate = new Date(s.created_at || (s as any).createdAt);
-          return sessionDate.toDateString() === eventDate.toDateString();
+    if (isEventOnTargetDay) {
+      // Checklist items completed on this day
+      if (e.prepChecklist && e.prepChecklist.length > 0) {
+        e.prepChecklist.forEach((item) => {
+          if (item.done) {
+            score += 3; // +3 points per prep checklist item completed
+          }
         });
+      }
+
+      // Skipped planned focus sessions on this day
+      if (e.type === 'focus' || e.type === 'study') {
+        const eventDateTime = new Date(eventDate);
+        eventDateTime.setHours(Math.floor(e.start), Math.round((e.start % 1) * 60), 0, 0);
         
-        if (!hasLoggedFocusOnDay) {
-          score -= 8; // Penalty for skipping planned focus session
+        if (eventDateTime.getTime() < targetTime) {
+          const hasLoggedFocusOnDay = focusSessions.some((s) => {
+            const sessionDate = new Date(s.created_at || (s as any).createdAt);
+            return sessionDate.toDateString() === eventDate.toDateString();
+          });
+          
+          if (!hasLoggedFocusOnDay) {
+            score -= 8; // Penalty for skipping planned focus session
+          }
         }
       }
     }
   });
 
-  // 8. Rescue Mode Activations
-  score += Math.min(10, rescueActivations * 4); // +4 points per activation, max 10 points
+  // 8. Rescue Mode Activations (only reward if targetDate is today)
+  const isToday = targetDate.toDateString() === new Date().toDateString();
+  if (isToday) {
+    score += Math.min(10, rescueActivations * 4); // +4 points per activation, max 10 points
+  }
 
   // 9. Daily Activity & Weekly Consistency
-  const taskCompletedToday = tasksFiltered.some(t => {
+  const taskCompletedToday = tasks.some(t => {
     if (!t.done) return false;
     const completedLog = t.activityLog?.find(log => 
       log.action.toLowerCase().includes('completed')
@@ -219,12 +274,12 @@ export function calculateProductivityScore(
     }
     return isTargetDay(t.createdAt);
   });
-  const focusLoggedToday = focusSessionsFiltered.some(s => isTargetDay(s.created_at || (s as any).createdAt));
+  const focusLoggedToday = focusSessionsOnDay.length > 0;
   if (taskCompletedToday || focusLoggedToday) {
     score += 8; // Daily activity bonus
   }
 
-  const tasksCompletedThisWeek = tasksFiltered.filter(t => {
+  const tasksCompletedThisWeek = tasks.filter(t => {
     if (!t.done) return false;
     const completedLog = t.activityLog?.find(log => 
       log.action.toLowerCase().includes('completed')
