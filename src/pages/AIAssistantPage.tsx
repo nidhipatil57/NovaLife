@@ -98,6 +98,11 @@ export default function AIAssistantPage() {
   const [editingConvId, setEditingConvId] = useState<string | null>(null);
   const [editTitleInput, setEditTitleInput] = useState('');
 
+  // Menu and delete confirmation state
+  const [activeMenuConvId, setActiveMenuConvId] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [convIdToDelete, setConvIdToDelete] = useState<string | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
@@ -169,6 +174,24 @@ export default function AIAssistantPage() {
       handleSendMessage(location.state.prefilledMsg);
     }
   }, [location.state, activeConvId]);
+
+  // Handle closing options dropdown when clicking anywhere
+  useEffect(() => {
+    const closeMenu = () => setActiveMenuConvId(null);
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, []);
+
+  const handleToggleMenu = (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveMenuConvId(prev => prev === convId ? null : convId);
+  };
+
+  const handlePromptDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConvIdToDelete(id);
+    setShowDeleteModal(true);
+  };
 
   const userDisplayName = user?.displayName || user?.email?.split('@')[0] || 'User';
 
@@ -248,7 +271,8 @@ CRITICAL FORMATTING INSTRUCTIONS:
 4. Write in cohesive, well-written paragraphs. Use bullet points ONLY when they genuinely improve readability (e.g. listing distinct action items, options, or recommendations).
 5. Always analyze the user's actual database records provided above before responding to give hyper-personalized advice. Avoid generic advice or placeholders.
 6. If a task has "[OVERDUE!]" next to its due date, point out that it is overdue and prompt the user to complete or reschedule it, without dwelling on it.
-7. You have complete access to the user's actual finance information. If they ask about their balance, spending, budgets, or savings goals, answer them accurately using their real transaction records rather than placeholders.`;
+7. You have complete access to the user's actual finance information. If they ask about their balance, spending, budgets, or savings goals, answer them accurately using their real transaction records rather than placeholders.
+8. CRITICAL: DO NOT output any thinking process, drafting notes, checklists, planning steps, check-offs, or reasoning blocks. Your response must contain ONLY the final conversational message that the user reads, starting directly with the greeting (e.g., 'Hey Nidhi!'). Do not prefix or suffix your response with any other text. Do not output anything other than the final response.`;
   };
 
   const handleSendMessage = async (text?: string) => {
@@ -297,16 +321,13 @@ CRITICAL FORMATTING INSTRUCTIONS:
 
       // Call Gemini API with Streaming
       const requestBody = {
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: systemPrompt }]
-          },
-          ...chatHistory.map(h => ({
-            role: h.role,
-            parts: [{ text: h.text }]
-          }))
-        ],
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: chatHistory.map(h => ({
+          role: h.role,
+          parts: [{ text: h.text }]
+        })),
         generationConfig: {
           temperature: 0.7,
           maxOutputTokens: 2048,
@@ -346,7 +367,7 @@ CRITICAL FORMATTING INSTRUCTIONS:
     } catch (err: any) {
       console.error('Gemini call error:', err);
       // Remove temp message if it exists and is empty
-      setMessages(prev => prev.filter(m => !m.id.startsWith('temp_') && m.text !== ''));
+      setMessages(prev => prev.filter(m => !String(m.id).startsWith('temp_') && m.text !== ''));
       // Fallback message
       const errorMsg: Message = {
         id: 'err_' + Date.now(),
@@ -387,13 +408,6 @@ CRITICAL FORMATTING INSTRUCTIONS:
     await updateConversation(conv.id, { pinned: !conv.pinned });
   };
 
-  const handleDeleteChat = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    await deleteConversation(id);
-    if (activeConvId === id) {
-      setActiveConvId(null);
-    }
-  };
 
   // Filter conversations
   const filteredConversations = conversations.filter(c =>
@@ -455,10 +469,46 @@ CRITICAL FORMATTING INSTRUCTIONS:
                   ) : (
                     <>
                       <span className="chat-item-title">💬 {conv.title}</span>
-                      <div className="chat-item-actions">
-                        <button onClick={(e) => handleTogglePin(conv, e)} title="Unpin Chat">📌</button>
-                        <button onClick={(e) => handleStartRename(conv, e)} title="Rename Chat">✏️</button>
-                        <button onClick={(e) => handleDeleteChat(conv.id, e)} title="Delete Chat">🗑️</button>
+                      <div className="chat-item-actions" onClick={e => e.stopPropagation()}>
+                        <button 
+                          className={`chat-action-btn pin-btn ${conv.pinned ? 'pinned' : ''}`}
+                          onClick={(e) => handleTogglePin(conv, e)} 
+                          title={conv.pinned ? "Unpin Chat" : "Pin Chat"}
+                        >
+                          📌
+                        </button>
+                        <div className="menu-container" style={{ position: 'relative' }}>
+                          <button 
+                            className="chat-action-btn dots-btn" 
+                            onClick={(e) => handleToggleMenu(conv.id, e)} 
+                            title="Chat Options"
+                          >
+                            ⋮
+                          </button>
+                          {activeMenuConvId === conv.id && (
+                            <div className="chat-options-dropdown">
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setActiveMenuConvId(null); 
+                                  handleStartRename(conv, e); 
+                                }}
+                              >
+                                ✏️ Rename
+                              </button>
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setActiveMenuConvId(null); 
+                                  handlePromptDelete(conv.id, e); 
+                                }}
+                                className="delete-option"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </>
                   )}
@@ -494,10 +544,46 @@ CRITICAL FORMATTING INSTRUCTIONS:
                   ) : (
                     <>
                       <span className="chat-item-title">💬 {conv.title}</span>
-                      <div className="chat-item-actions">
-                        <button onClick={(e) => handleTogglePin(conv, e)} title="Pin Chat">📌</button>
-                        <button onClick={(e) => handleStartRename(conv, e)} title="Rename Chat">✏️</button>
-                        <button onClick={(e) => handleDeleteChat(conv.id, e)} title="Delete Chat">🗑️</button>
+                      <div className="chat-item-actions" onClick={e => e.stopPropagation()}>
+                        <button 
+                          className={`chat-action-btn pin-btn ${conv.pinned ? 'pinned' : ''}`}
+                          onClick={(e) => handleTogglePin(conv, e)} 
+                          title={conv.pinned ? "Unpin Chat" : "Pin Chat"}
+                        >
+                          📌
+                        </button>
+                        <div className="menu-container" style={{ position: 'relative' }}>
+                          <button 
+                            className="chat-action-btn dots-btn" 
+                            onClick={(e) => handleToggleMenu(conv.id, e)} 
+                            title="Chat Options"
+                          >
+                            ⋮
+                          </button>
+                          {activeMenuConvId === conv.id && (
+                            <div className="chat-options-dropdown">
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setActiveMenuConvId(null); 
+                                  handleStartRename(conv, e); 
+                                }}
+                              >
+                                ✏️ Rename
+                              </button>
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setActiveMenuConvId(null); 
+                                  handlePromptDelete(conv.id, e); 
+                                }}
+                                className="delete-option"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </>
                   )}
@@ -588,6 +674,41 @@ CRITICAL FORMATTING INSTRUCTIONS:
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="task-detail-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="task-detail-panel widget delete-confirm-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px', textAlign: 'center', padding: '30px' }}>
+            <h4 style={{ marginBottom: '12px', fontSize: '18px', fontWeight: 'bold' }}>Delete Conversation</h4>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5', marginBottom: '24px' }}>
+              Are you sure you want to permanently delete this chat? All message history will be lost.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button className="btn-secondary" onClick={() => setShowDeleteModal(false)} style={{ flex: 1 }}>
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={async () => {
+                  if (convIdToDelete) {
+                    await deleteConversation(convIdToDelete);
+                    if (activeConvId === convIdToDelete) {
+                      setActiveConvId(null);
+                      setMessages([]);
+                    }
+                  }
+                  setShowDeleteModal(false);
+                  setConvIdToDelete(null);
+                }} 
+                style={{ background: 'var(--accent-red)', borderColor: 'var(--accent-red)', color: 'white', flex: 1 }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
