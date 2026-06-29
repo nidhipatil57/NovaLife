@@ -148,12 +148,12 @@
 }
 
 .sidebar-chat-item.active .chat-item-title {
-  color: white;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .sidebar-chat-item:hover .chat-item-title {
-  color: white;
+  color: var(--text-primary);
 }
 
 .chat-item-actions {

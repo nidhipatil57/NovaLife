@@ -351,6 +351,64 @@ export default function GoalsPage() {
   const [goalQuestions, setGoalQuestions] = useState<{[key: string]: Array<{q: string, a: string, loading?: boolean}>}>({});
   const [customQuestionInput, setCustomQuestionInput] = useState('');
 
+  // AI Goal Coach States
+  const [overallGoalAnalysis, setOverallGoalAnalysis] = useState<any>(null);
+  const [loadingOverallAnalysis, setLoadingOverallAnalysis] = useState(false);
+
+  useEffect(() => {
+    if (goals.length > 0 && !overallGoalAnalysis && !loadingOverallAnalysis && !loading) {
+      runOverallGoalAnalysis();
+    }
+  }, [goals.length, loading]);
+
+  const runOverallGoalAnalysis = async () => {
+    setLoadingOverallAnalysis(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API Key is not configured');
+
+      const systemPrompt = `You are "Nova", an elite productivity and goals achievement coach. Analyze the user's goals:
+${JSON.stringify(goals.map(g => ({ name: g.name, category: g.category, progress: g.progress, streak: g.streak || 0, milestoneCount: g.milestones?.length || 0, completedMilestonesCount: g.milestones?.filter(m => m.done).length || 0, completedBy: g.completed_by })))}
+
+Provide an intelligent, tactical goals performance analysis.
+You MUST respond with a JSON object matching this exact schema. Do not write any explanations outside the JSON object. Do not wrap the JSON in markdown code blocks.
+
+{
+  "focusArea": "Identify the primary category or goal needing immediate focus based on progress or deadlines",
+  "milestoneVelocity": "Analyze the rate/status of milestone completion and how to speed it up",
+  "timelineRisk": "Identify risk of missing deadlines (target dates) and suggest adjustments",
+  "actionableTip": "Provide 1-2 custom steps to unblock progress on the lowest progress goal"
+}
+`;
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to get goal analysis');
+      const data = await response.json();
+      const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text.trim() || '{}');
+      setOverallGoalAnalysis(parsed);
+    } catch (err) {
+      console.error('Goal analysis failed:', err);
+      setOverallGoalAnalysis({
+        error: true,
+        focusArea: 'Prioritize goals with pending milestones.',
+        milestoneVelocity: 'Break larger milestones down into bite-sized daily tasks.',
+        timelineRisk: 'Set specific target dates to increase completion likelihood.',
+        actionableTip: 'Review your lowest-progress goal and complete its first sub-milestone today.'
+      });
+    } finally {
+      setLoadingOverallAnalysis(false);
+    }
+  };
+
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
 
@@ -1045,18 +1103,55 @@ You must respond with a JSON array of strings only. Do not write any explanation
         </div>
       )}
 
-      {/* AI Goal Planner Info */}
+      {/* Dynamic AI Goal Coach Insights */}
       {goals.length > 0 && (
-        <div className="ai-planner widget">
-          <div className="widget-header">
-            <h4>🤖 AI Goal Planner</h4>
+        <div className="goal-insights widget" style={{ marginTop: '24px' }}>
+          <div className="widget-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px', marginBottom: '16px' }}>
+            <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <span>🧠</span> AI Goal Coach & Insights
+            </h4>
           </div>
-          <div className="planner-content">
-            <div className="planner-ai-msg">
-              <div className="ai-avatar-inner" style={{ width: 24, height: 24, flexShrink: 0 }}></div>
-              <p>Your goals and milestones are stored securely in Cloud Firestore and will synchronize automatically across all devices.</p>
+
+          {loadingOverallAnalysis && !overallGoalAnalysis ? (
+            <div className="ai-loading" style={{ padding: '24px', textAlign: 'center' }}>
+              <div className="ai-onboard-avatar" style={{ margin: '0 auto 12px auto', width: '32px', height: '32px' }}></div>
+              <p style={{ fontSize: 'var(--text-sm)' }}>Nova is scanning your goals progress and timeline targets...</p>
             </div>
-          </div>
+          ) : (
+            <>
+              {overallGoalAnalysis && (
+                <div className="goal-analysis-grid">
+                  <div className="analysis-card widget glass-card-static" style={{ padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '6px' }}>🎯 Recommended Focus Area</div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
+                      {overallGoalAnalysis.focusArea}
+                    </p>
+                  </div>
+
+                  <div className="analysis-card widget glass-card-static" style={{ padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '6px' }}>📈 Milestone Velocity</div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
+                      {overallGoalAnalysis.milestoneVelocity}
+                    </p>
+                  </div>
+
+                  <div className="analysis-card widget glass-card-static" style={{ padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '6px' }}>⚠️ Timeline & Schedule Risk</div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
+                      {overallGoalAnalysis.timelineRisk}
+                    </p>
+                  </div>
+
+                  <div className="analysis-card widget glass-card-static" style={{ padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginBottom: '6px' }}>💡 Actionable Coaching Advice</div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: '1.4' }}>
+                      {overallGoalAnalysis.actionableTip}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

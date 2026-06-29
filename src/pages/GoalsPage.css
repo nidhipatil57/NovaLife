@@ -23,8 +23,8 @@
 /* Premium Goal Card */
 .goal-card {
   padding: var(--space-6) !important;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(30, 41, 59, 0.4) 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.03) !important;
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
   backdrop-filter: blur(20px);
   border-radius: var(--radius-xl) !important;
   transition: all var(--duration-normal) var(--ease-out);
@@ -450,6 +450,28 @@
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); }
   30% { transform: translateY(-6px); }
+}
+
+/* AI Insights Section */
+.goal-insights {
+  margin-top: var(--space-6);
+  padding: var(--space-6) !important;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.05) 0%, rgba(99, 102, 241, 0.02) 100%) !important;
+  border: 1px solid rgba(6, 182, 212, 0.15) !important;
+  box-shadow: 0 8px 32px 0 rgba(6, 182, 212, 0.04);
+  border-radius: var(--radius-xl) !important;
+}
+
+.goal-analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .goal-analysis-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 

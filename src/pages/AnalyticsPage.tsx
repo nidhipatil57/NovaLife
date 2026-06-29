@@ -26,10 +26,10 @@ export default function AnalyticsPage() {
     const today = new Date();
     let currentDay = today.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
     if (currentDay === 0) currentDay = 7; // Map Sun to 7 so Mon is 1
-    
+
     const monday = new Date(today);
     monday.setDate(today.getDate() - currentDay + 1);
-    
+
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
@@ -50,22 +50,22 @@ export default function AnalyticsPage() {
 
       const tasksCompletedOnDay = tasks.filter(t => {
         if (!t.done) return false;
-        
+
         const completionLogs = t.activityLog
           ? t.activityLog.filter(log => log.action.toLowerCase().includes('completed'))
           : [];
-        
+
         if (completionLogs.length > 0) {
           const lastLog = completionLogs[completionLogs.length - 1];
           const logDate = new Date(lastLog.timestamp);
           return logDate.toDateString() === targetDateStr;
         }
-        
+
         if (t.createdAt) {
           const createdDate = new Date(t.createdAt);
           return createdDate.toDateString() === targetDateStr;
         }
-        
+
         return false;
       }).length;
 
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
   }, []);
 
   const monthlyTxs = useMemo(() => {
-    return transactions.filter(t => t.date === currentMonthStr);
+    return transactions.filter(t => t.date && t.date.startsWith(currentMonthStr));
   }, [transactions, currentMonthStr]);
 
   const monthlyIncome = useMemo(() => {
@@ -240,35 +240,35 @@ export default function AnalyticsPage() {
   // Generate achievements card PNG using Canvas
   const generatePNGCard = (): string => {
     const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 500;
+    canvas.width = 1000;
+    canvas.height = 580;
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
     // Gradient background
-    const grad = ctx.createLinearGradient(0, 0, 800, 500);
-    grad.addColorStop(0, '#0f0c1b');
-    grad.addColorStop(1, '#05020a');
+    const grad = ctx.createLinearGradient(0, 0, 1000, 580);
+    grad.addColorStop(0, '#0a0e1a'); // Very dark blue
+    grad.addColorStop(1, '#05070d'); // Pitch black
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 800, 500);
+    ctx.fillRect(0, 0, 1000, 580);
 
     // Glowing radial overlays
-    const glowTL = ctx.createRadialGradient(0, 0, 50, 0, 0, 400);
-    glowTL.addColorStop(0, 'rgba(139, 92, 246, 0.18)'); // Violet
+    const glowTL = ctx.createRadialGradient(0, 0, 50, 0, 0, 500);
+    glowTL.addColorStop(0, 'rgba(139, 92, 246, 0.16)'); // Purple glow
     glowTL.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = glowTL;
-    ctx.fillRect(0, 0, 800, 500);
+    ctx.fillRect(0, 0, 1000, 580);
 
-    const glowBR = ctx.createRadialGradient(800, 500, 50, 800, 500, 400);
-    glowBR.addColorStop(0, 'rgba(6, 182, 212, 0.15)'); // Cyan
+    const glowBR = ctx.createRadialGradient(1000, 580, 50, 1000, 580, 500);
+    glowBR.addColorStop(0, 'rgba(6, 182, 212, 0.12)'); // Cyan glow
     glowBR.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = glowBR;
-    ctx.fillRect(0, 0, 800, 500);
+    ctx.fillRect(0, 0, 1000, 580);
 
-    // Rounded border outer container
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 2;
-    drawRoundedRect(ctx, 15, 15, 770, 470, 16);
+    // Outer border container
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1.5;
+    drawRoundedRect(ctx, 15, 15, 970, 550, 20);
     ctx.stroke();
 
     // ─── HEADER ───
@@ -288,11 +288,11 @@ export default function AnalyticsPage() {
     // Brand label
     ctx.fillStyle = '#a78bfa';
     ctx.font = 'bold 9px sans-serif';
-    ctx.fillText('WEEKLY PERFORMANCE REPORT', 80, 42);
+    ctx.fillText('WEEKLY PERFORMANCE REPORT', 95, 42);
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 22px sans-serif';
-    ctx.fillText('NovaLife Metrics', 80, 62);
+    ctx.fillText('NovaLife Metrics', 95, 71);
 
     // User Subtitle
     ctx.fillStyle = '#9ca3af';
@@ -304,131 +304,141 @@ export default function AnalyticsPage() {
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(40, 120);
-    ctx.lineTo(760, 120);
+    ctx.lineTo(960, 120);
     ctx.stroke();
 
-    // ─── LEFT COLUMN: STATS CARDS ───
-    const cardX = 40;
-    const cardW = 320;
-    const cardH = 75;
+    // ─── THREE COLUMNS LAYOUT ───
+    // Column 1: Productivity Cards (x = 40, w = 290)
+    // Column 2: Daily Activity Trend Chart (x = 354, w = 330)
+    // Column 3: Financial Summary (x = 708, w = 252)
 
-    // Card 1: Focus Time
+    // Calculate current month financial totals
+    const nowMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+    const mTxs = transactions.filter(t => t.date && t.date.startsWith(nowMonthStr));
+    const mIncome = mTxs.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const mExpense = mTxs.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
+    const mSavings = mIncome - mExpense;
+
+    // ─── COLUMN 1: PRODUCTIVITY METRICS (x = 40, w = 290) ───
+    const col1X = 40;
+    const cardW = 290;
+    const cardH = 80;
+    const gapY = 15;
+
+    // Card 1.1: Focus Time (y = 140)
     const y1 = 140;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    drawRoundedRect(ctx, cardX, y1, cardW, cardH, 12);
+    drawRoundedRect(ctx, col1X, y1, cardW, cardH, 12);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.stroke();
 
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('TOTAL FOCUS TIME', cardX + 50, y1 + 25);
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('TOTAL FOCUS TIME', col1X + 50, y1 + 28);
     ctx.font = '22px sans-serif';
-    ctx.fillText('⏱️', cardX + 15, y1 + 45);
-    ctx.fillStyle = '#38bdf8'; // light blue
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`${totalFocusHours} Hours`, cardX + 50, y1 + 52);
+    ctx.fillText('⏱️', col1X + 16, y1 + 48);
+    ctx.fillStyle = '#60a5fa'; // Blue light
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`${totalFocusHours} Hours`, col1X + 50, y1 + 54);
 
-    // Card 2: Tasks Completed
-    const y2 = 225;
+    // Card 1.2: Tasks Completed (y = 235)
+    const y2 = y1 + cardH + gapY;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    drawRoundedRect(ctx, cardX, y2, cardW, cardH, 12);
+    drawRoundedRect(ctx, col1X, y2, cardW, cardH, 12);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.stroke();
 
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('TASKS COMPLETED', cardX + 50, y2 + 25);
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('TASKS COMPLETED', col1X + 50, y2 + 28);
     ctx.font = '22px sans-serif';
-    ctx.fillText('✅', cardX + 15, y2 + 45);
-    ctx.fillStyle = '#34d399'; // green
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`${completedTasksCount} / ${tasks.length} Completed`, cardX + 50, y2 + 52);
+    ctx.fillText('✅', col1X + 16, y2 + 48);
+    ctx.fillStyle = '#34d399'; // Green light
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`${completedTasksCount} / ${tasks.length} Done`, col1X + 50, y2 + 50);
 
-    // Draw little task completion progress bar inside Card 2
+    // Draw little progress bar
     ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    drawRoundedRect(ctx, cardX + 50, y2 + 58, 250, 5, 2.5);
+    drawRoundedRect(ctx, col1X + 50, y2 + 58, 220, 4, 2);
     ctx.fill();
-    const taskPct = tasks.length > 0 ? (completedTasksCount / tasks.length) : 0;
-    if (taskPct > 0) {
+    const tPct = tasks.length > 0 ? (completedTasksCount / tasks.length) : 0;
+    if (tPct > 0) {
       ctx.fillStyle = '#34d399';
-      drawRoundedRect(ctx, cardX + 50, y2 + 58, 250 * taskPct, 5, 2.5);
+      drawRoundedRect(ctx, col1X + 50, y2 + 58, 220 * tPct, 4, 2);
       ctx.fill();
     }
 
-    // Card 3: Productivity Score
-    const y3 = 310;
+    // Card 1.3: Productivity Score (y = 330)
+    const y3 = y2 + cardH + gapY;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    drawRoundedRect(ctx, cardX, y3, cardW, cardH, 12);
+    drawRoundedRect(ctx, col1X, y3, cardW, cardH, 12);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.stroke();
 
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('PRODUCTIVITY SCORE', cardX + 50, y3 + 25);
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('PRODUCTIVITY SCORE', col1X + 50, y3 + 28);
     ctx.font = '22px sans-serif';
-    ctx.fillText('📈', cardX + 15, y3 + 45);
-    ctx.fillStyle = '#a78bfa'; // purple
-    ctx.font = 'bold 20px sans-serif';
-    
-    let ratingStr = 'Growing';
-    if (productivityScore >= 80) ratingStr = 'Legendary';
-    else if (productivityScore >= 65) ratingStr = 'Optimal';
-    else if (productivityScore >= 45) ratingStr = 'Good';
+    ctx.fillText('📈', col1X + 16, y3 + 48);
+    ctx.fillStyle = '#a78bfa'; // Purple light
+    ctx.font = 'bold 18px sans-serif';
 
-    ctx.fillText(`${productivityScore} / 100 (${ratingStr})`, cardX + 50, y3 + 52);
+    let rateStr = 'Growing';
+    if (productivityScore >= 80) rateStr = 'Legendary';
+    else if (productivityScore >= 65) rateStr = 'Optimal';
+    else if (productivityScore >= 45) rateStr = 'Good';
+    ctx.fillText(`${productivityScore} / 100 (${rateStr})`, col1X + 50, y3 + 54);
 
-    // Card 4: Goal Progress
-    const y4 = 395;
+    // Card 1.4: Goal Progress (y = 425)
+    const y4 = y3 + cardH + gapY;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    drawRoundedRect(ctx, cardX, y4, cardW, cardH, 12);
+    drawRoundedRect(ctx, col1X, y4, cardW, cardH, 12);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     ctx.stroke();
 
     ctx.fillStyle = '#9ca3af';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('GOAL PROGRESS', cardX + 50, y4 + 25);
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('GOAL PROGRESS', col1X + 50, y4 + 28);
     ctx.font = '22px sans-serif';
-    ctx.fillText('🎯', cardX + 15, y4 + 45);
-    ctx.fillStyle = '#fb7185'; // rose
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`${avgGoalProgress}% Complete`, cardX + 50, y4 + 52);
+    ctx.fillText('🎯', col1X + 16, y4 + 48);
+    ctx.fillStyle = '#fb7185'; // Rose light
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`${avgGoalProgress}% Achieved`, col1X + 50, y4 + 50);
 
     // Goal progress meter
     ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    drawRoundedRect(ctx, cardX + 50, y4 + 58, 250, 5, 2.5);
+    drawRoundedRect(ctx, col1X + 50, y4 + 58, 220, 4, 2);
     ctx.fill();
     if (avgGoalProgress > 0) {
       ctx.fillStyle = '#fb7185';
-      drawRoundedRect(ctx, cardX + 50, y4 + 58, 250 * (avgGoalProgress / 100), 5, 2.5);
+      drawRoundedRect(ctx, col1X + 50, y4 + 58, 220 * (avgGoalProgress / 100), 4, 2);
       ctx.fill();
     }
 
-    // ─── RIGHT COLUMN: DAILY ACTIVITY TREND CHART ───
-    const chartX = 390;
-    const chartY = 140;
-    const chartW = 370;
-    const chartH = 330;
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    drawRoundedRect(ctx, chartX, chartY, chartW, chartH, 12);
+    // ─── COLUMN 2: DAILY ACTIVITY TREND CHART (x = 354, w = 330) ───
+    const chartX = 354;
+    const chartY = 140;
+    const chartW = 330;
+    const chartH = 365;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.015)';
+    drawRoundedRect(ctx, chartX, chartY, chartW, chartH, 16);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
     ctx.stroke();
 
     // Chart title
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('Daily Activity Trend', chartX + 24, chartY + 32);
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('Daily Activity Trend', chartX + 24, chartY + 30);
 
     // Gridlines (max score is 100)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
     ctx.lineWidth = 1;
-    const chartBaseY = chartY + 240; // Y base line for chart at value 0
-    const chartMaxHeight = 140;      // Height representing score = 100
+    const chartBaseY = chartY + 265; // Y base line
+    const chartMaxHeight = 180;      // Height representing score = 100
     [0, 50, 100].forEach(scoreVal => {
       const yLine = chartBaseY - (scoreVal / 100) * chartMaxHeight;
       ctx.beginPath();
@@ -437,14 +447,14 @@ export default function AnalyticsPage() {
       ctx.stroke();
 
       // Value label on gridline
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.font = '9px sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.font = '8px sans-serif';
       ctx.fillText(`${scoreVal}`, chartX + chartW - 20, yLine + 3);
     });
 
     // Draw bars for 7 days
     weeklyData.forEach((d, i) => {
-      const x = chartX + 32 + i * 44;
+      const x = chartX + 28 + i * 39;
       const valHeight = Math.max(4, (d.score / 100) * chartMaxHeight);
       const y = chartBaseY - valHeight;
 
@@ -454,35 +464,107 @@ export default function AnalyticsPage() {
       barGrad.addColorStop(1, '#3b82f6'); // Blue
       ctx.fillStyle = barGrad;
 
-      drawRoundedRect(ctx, x, y, 22, valHeight, 4);
+      drawRoundedRect(ctx, x, y, 18, valHeight, 3);
       ctx.fill();
 
       // Draw daily score text above the bar
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px sans-serif';
+      ctx.font = 'bold 9px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`${d.score}`, x + 11, y - 6);
+      ctx.fillText(`${d.score}`, x + 9, y - 6);
 
       // Draw day letter
       ctx.fillStyle = '#9ca3af';
-      ctx.font = '11px sans-serif';
-      ctx.fillText(d.day, x + 11, chartBaseY + 20);
+      ctx.font = '10px sans-serif';
+      ctx.fillText(d.day, x + 9, chartBaseY + 18);
     });
     ctx.textAlign = 'left'; // reset text alignment
 
     // Small explanation under the chart
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '11px sans-serif';
-    ctx.fillText('Consistency includes completed habits & task progression', chartX + 24, chartBaseY + 54);
+    ctx.fillStyle = '#4b5563';
+    ctx.font = '10px sans-serif';
+    ctx.fillText('Consistency includes completed habits & tasks', chartX + 24, chartBaseY + 44);
+
+
+    // ─── COLUMN 3: FINANCIAL SUMMARY (x = 708, w = 252) ───
+    const col3X = 708;
+    const col3W = 252;
+    const fCardH = 80;
+
+    // Card 3.1: Monthly Income
+    const fy1 = 140;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, col3X, fy1, col3W, fCardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('MONTHLY INCOME', col3X + 50, fy1 + 28);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('💰', col3X + 16, fy1 + 48);
+    ctx.fillStyle = '#34d399'; // Green light
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`₹${mIncome.toLocaleString()}`, col3X + 50, fy1 + 54);
+
+    // Card 3.2: Monthly Expenses
+    const fy2 = fy1 + fCardH + gapY;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, col3X, fy2, col3W, fCardH, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('MONTHLY EXPENSES', col3X + 50, fy2 + 28);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('💸', col3X + 16, fy2 + 48);
+    ctx.fillStyle = '#f87171'; // Red light
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`₹${mExpense.toLocaleString()}`, col3X + 50, fy2 + 54);
+
+    // Card 3.3: Net Monthly Savings
+    const fy3 = fy2 + fCardH + gapY;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, col3X, fy3, col3W, fCardH, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('NET SAVINGS', col3X + 50, fy3 + 28);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('🛡️', col3X + 16, fy3 + 48);
+    ctx.fillStyle = '#38bdf8'; // Cyan light
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`₹${mSavings.toLocaleString()}`, col3X + 50, fy3 + 54);
+
+    // Card 3.4: Financial Health
+    const fy4 = fy3 + fCardH + gapY;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    drawRoundedRect(ctx, col3X, fy4, col3W, fCardH, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('FINANCIAL HEALTH SCORE', col3X + 50, fy4 + 28);
+    ctx.font = '22px sans-serif';
+    ctx.fillText('❤️', col3X + 16, fy4 + 48);
+    ctx.fillStyle = '#a78bfa'; // Purple light
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`${financialHealthScore} / 100`, col3X + 50, fy4 + 54);
+
 
     // ─── FOOTER BRANDING ───
-    ctx.fillStyle = '#6b7280';
-    ctx.font = '11px sans-serif';
-    ctx.fillText('Empowering mindfulness & routine consistency', 40, 480);
+    ctx.fillStyle = '#4b5563';
+    ctx.font = '10px sans-serif';
+    ctx.fillText('NovaLife Productivity & Financial Engine', 40, 545);
 
-    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const nowStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
     ctx.textAlign = 'right';
-    ctx.fillText(`Date: ${nowStr} • Powered by NovaLife`, 760, 480);
+    ctx.fillText(`Date: ${nowStr} • Powered by NovaLife`, 960, 545);
     ctx.textAlign = 'left';
 
     return canvas.toDataURL('image/png');
@@ -566,9 +648,9 @@ export default function AnalyticsPage() {
         <div className="page-header-actions share-actions-group">
           {/* Share Dropdown Wrapper */}
           <div className="share-dropdown-wrapper">
-            <button 
-              className="icon-btn" 
-              onClick={() => setShowShareDropdown(!showShareDropdown)} 
+            <button
+              className="icon-btn"
+              onClick={() => setShowShareDropdown(!showShareDropdown)}
               title="Share Weekly Achievements"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -591,9 +673,9 @@ export default function AnalyticsPage() {
             )}
           </div>
           {/* Direct Download Button */}
-          <button 
-            className="icon-btn btn-primary" 
-            onClick={handleDownload} 
+          <button
+            className="icon-btn btn-primary"
+            onClick={handleDownload}
             title="Download Dashboard (PNG)"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -699,13 +781,13 @@ export default function AnalyticsPage() {
                   <div className="finance-health-circle-wrapper">
                     <svg viewBox="0 0 100 100" className="finance-health-svg">
                       <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="10" />
-                      <circle 
-                        cx="50" cy="50" r="38" 
-                        fill="none" 
-                        stroke="url(#financeHealthGrad)" 
-                        strokeWidth="10" 
-                        strokeDasharray={2 * Math.PI * 38} 
-                        strokeDashoffset={(2 * Math.PI * 38) * (1 - (financialHealthScore || 0) / 100)} 
+                      <circle
+                        cx="50" cy="50" r="38"
+                        fill="none"
+                        stroke="url(#financeHealthGrad)"
+                        strokeWidth="10"
+                        strokeDasharray={2 * Math.PI * 38}
+                        strokeDashoffset={(2 * Math.PI * 38) * (1 - (financialHealthScore || 0) / 100)}
                         strokeLinecap="round"
                         transform="rotate(-90 50 50)"
                         className="finance-health-progress-bar"
@@ -716,7 +798,7 @@ export default function AnalyticsPage() {
                           <stop offset="100%" stopColor="#06B6D4" />
                         </linearGradient>
                       </defs>
-                      <text x="50" y="49" textAnchor="middle" className="donut-pct" style={{ fill: '#fff', fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)' }}>
+                      <text x="50" y="49" textAnchor="middle" className="donut-pct" style={{ fill: 'var(--text-primary)', fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)' }}>
                         {financialHealthScore || 0}
                       </text>
                       <text x="50" y="64" textAnchor="middle" className="donut-sub" style={{ fill: 'var(--text-tertiary)', fontSize: '8px', fontWeight: '700', letterSpacing: '1px' }}>
@@ -724,7 +806,7 @@ export default function AnalyticsPage() {
                       </text>
                     </svg>
                   </div>
-                  
+
                   <div className="finance-summary-stats">
                     <div className="finance-summary-row">
                       <span className="finance-summary-label">Income:</span>
@@ -734,16 +816,16 @@ export default function AnalyticsPage() {
                       <span className="finance-summary-label">Expenses:</span>
                       <span className="finance-summary-val expense">₹{monthlyExpenses.toLocaleString()}</span>
                     </div>
-                    
+
                     <div className="finance-savings-rate-section">
                       <div className="finance-savings-rate-header">
                         <span className="finance-savings-rate-label">Savings Rate</span>
                         <span className="finance-savings-rate-val">{savingsRate}%</span>
                       </div>
                       <div className="finance-savings-rate-bar">
-                        <div 
-                          className="finance-savings-rate-fill" 
-                          style={{ 
+                        <div
+                          className="finance-savings-rate-fill"
+                          style={{
                             width: `${Math.max(0, Math.min(100, savingsRate))}%`,
                             background: savingsRate >= 20 ? '#10B981' : savingsRate > 0 ? '#3B82F6' : '#EF4444'
                           }}
@@ -771,9 +853,9 @@ export default function AnalyticsPage() {
                               <span className="finance-category-amount" style={{ color: 'var(--text-secondary)' }}>₹{item.amount.toLocaleString()} ({pct}%)</span>
                             </div>
                             <div className="finance-category-bar" style={{ height: '6px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                              <div 
-                                className="finance-category-fill" 
-                                style={{ 
+                              <div
+                                className="finance-category-fill"
+                                style={{
                                   height: '100%',
                                   width: `${pct}%`,
                                   background: 'linear-gradient(to right, #8B5CF6, #06B6D4)'
@@ -790,7 +872,7 @@ export default function AnalyticsPage() {
                 {/* Column 3: Commitments & Savings Goals */}
                 <div className="finance-col-goals">
                   <h5 className="finance-sub-title">Goals & Bills</h5>
-                  
+
                   <div className="finance-goals-section">
                     {activeSavingsGoals.length === 0 ? (
                       <div className="no-finance-data" style={{ padding: '20px 0', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>
@@ -809,9 +891,9 @@ export default function AnalyticsPage() {
                                 <span className="finance-goal-pct" style={{ color: 'var(--text-secondary)' }}>{goalPct}%</span>
                               </div>
                               <div className="finance-goal-bar" style={{ height: '6px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                                <div 
-                                  className="finance-goal-fill" 
-                                  style={{ 
+                                <div
+                                  className="finance-goal-fill"
+                                  style={{
                                     height: '100%',
                                     width: `${goalPct}%`,
                                     background: goal.color || '#3B82F6'
@@ -824,12 +906,12 @@ export default function AnalyticsPage() {
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="finance-bills-status" style={{ marginTop: '16px', padding: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-xs)' }}>
                     <span className="finance-bills-icon">📅</span>
                     <span className="finance-bills-text" style={{ color: 'var(--text-secondary)', fontWeight: '500' }}>
-                      {unpaidBillsCount === 0 
-                        ? "All bills paid! 🎉" 
+                      {unpaidBillsCount === 0
+                        ? "All bills paid! 🎉"
                         : `${unpaidBillsCount} unpaid bill${unpaidBillsCount > 1 ? 's' : ''} outstanding`}
                     </span>
                   </div>
@@ -847,37 +929,37 @@ export default function AnalyticsPage() {
                     <svg viewBox="0 0 100 100" className="donut-chart-svg">
                       {/* Background Circle */}
                       <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="10" />
-                      
+
                       {/* Done Segment */}
                       {goals.filter(g => g.progress === 100).length > 0 && (
-                        <circle 
-                          cx="50" cy="50" r="38" 
-                          fill="none" 
-                          stroke="url(#doneGrad)" 
-                          strokeWidth="10" 
-                          strokeDasharray={2 * Math.PI * 38} 
-                          strokeDashoffset={(2 * Math.PI * 38) * (1 - (goals.filter(g => g.progress === 100).length / goals.length))} 
+                        <circle
+                          cx="50" cy="50" r="38"
+                          fill="none"
+                          stroke="url(#doneGrad)"
+                          strokeWidth="10"
+                          strokeDasharray={2 * Math.PI * 38}
+                          strokeDashoffset={(2 * Math.PI * 38) * (1 - (goals.filter(g => g.progress === 100).length / goals.length))}
                           strokeLinecap="round"
                           transform="rotate(-90 50 50)"
                           className="donut-segment-done"
                         />
                       )}
-                      
+
                       {/* Ongoing Segment */}
                       {goals.filter(g => g.progress < 100).length > 0 && (
-                        <circle 
-                          cx="50" cy="50" r="38" 
-                          fill="none" 
-                          stroke="url(#ongoingGrad)" 
-                          strokeWidth="10" 
-                          strokeDasharray={2 * Math.PI * 38} 
-                          strokeDashoffset={(2 * Math.PI * 38) * (1 - (goals.filter(g => g.progress < 100).length / goals.length))} 
+                        <circle
+                          cx="50" cy="50" r="38"
+                          fill="none"
+                          stroke="url(#ongoingGrad)"
+                          strokeWidth="10"
+                          strokeDasharray={2 * Math.PI * 38}
+                          strokeDashoffset={(2 * Math.PI * 38) * (1 - (goals.filter(g => g.progress < 100).length / goals.length))}
                           strokeLinecap="round"
                           transform={`rotate(${(goals.filter(g => g.progress === 100).length / goals.length) * 360 - 90} 50 50)`}
                           className="donut-segment-ongoing"
                         />
                       )}
-                      
+
                       {/* Gradients */}
                       <defs>
                         <linearGradient id="doneGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -891,7 +973,7 @@ export default function AnalyticsPage() {
                       </defs>
 
                       {/* Center Text */}
-                      <text x="50" y="49" textAnchor="middle" className="donut-pct" style={{ fill: '#fff', fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)' }}>
+                      <text x="50" y="49" textAnchor="middle" className="donut-pct" style={{ fill: 'var(--text-primary)', fontSize: '18px', fontWeight: '800', fontFamily: 'var(--font-display)' }}>
                         {Math.round((goals.filter(g => g.progress === 100).length / goals.length) * 100)}%
                       </text>
                       <text x="50" y="64" textAnchor="middle" className="donut-sub" style={{ fill: 'var(--text-tertiary)', fontSize: '8px', fontWeight: '700', letterSpacing: '1px' }}>
@@ -901,11 +983,11 @@ export default function AnalyticsPage() {
 
                     <div className="donut-legend">
                       <div className="legend-item">
-                        <span className="legend-dot done" style={{ background: '#10B981' }}></span> 
+                        <span className="legend-dot done" style={{ background: '#10B981' }}></span>
                         Done: {goals.filter(g => g.progress === 100).length}
                       </div>
                       <div className="legend-item">
-                        <span className="legend-dot ongoing" style={{ background: '#3B82F6' }}></span> 
+                        <span className="legend-dot ongoing" style={{ background: '#3B82F6' }}></span>
                         Ongoing: {goals.filter(g => g.progress < 100).length}
                       </div>
                     </div>
@@ -960,8 +1042,8 @@ export default function AnalyticsPage() {
                         {daysOfWeek.map((day, idx) => {
                           const done = h.week[idx];
                           return (
-                            <div 
-                              key={idx} 
+                            <div
+                              key={idx}
                               className={`mini-grid-cell ${done ? 'done' : ''}`}
                               style={{ '--h-color': h.color } as React.CSSProperties}
                               title={`${day}: ${done ? 'Completed' : 'Missed'}`}
@@ -989,7 +1071,7 @@ export default function AnalyticsPage() {
                         height: `${d.score}%`,
                         background: d.score >= 80 ? 'linear-gradient(to top, var(--accent-green), var(--accent-cyan))'
                           : d.score >= 50 ? 'linear-gradient(to top, var(--accent-blue), var(--accent-purple))'
-                          : 'linear-gradient(to top, var(--accent-orange), var(--accent-red))'
+                            : 'linear-gradient(to top, var(--accent-orange), var(--accent-red))'
                       }}>
                         <span className="trend-value">{d.score}</span>
                       </div>

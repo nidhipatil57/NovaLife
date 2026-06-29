@@ -43,7 +43,7 @@
 
 .card-focus {
   border-color: rgba(59, 130, 246, 0.12) !important;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .card-focus:hover {
   border-color: rgba(59, 130, 246, 0.35) !important;
@@ -52,7 +52,7 @@
 
 .card-tasks {
   border-color: rgba(16, 185, 129, 0.12) !important;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.03) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.03) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .card-tasks:hover {
   border-color: rgba(16, 185, 129, 0.35) !important;
@@ -61,7 +61,7 @@
 
 .card-score {
   border-color: rgba(139, 92, 246, 0.12) !important;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.03) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.03) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .card-score:hover {
   border-color: rgba(139, 92, 246, 0.35) !important;
@@ -70,7 +70,7 @@
 
 .card-goals {
   border-color: rgba(236, 72, 153, 0.12) !important;
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.03) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.03) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .card-goals:hover {
   border-color: rgba(236, 72, 153, 0.35) !important;
@@ -486,10 +486,10 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  background: rgba(23, 23, 33, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-elevated);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-lg);
   z-index: 100;
   min-width: 170px;
   padding: 6px 0;
@@ -519,7 +519,7 @@
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(139, 92, 246, 0.1);
   color: var(--text-primary);
 }
 
@@ -528,6 +528,7 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  min-width: 0;
 }
 
 .goals-donut-container {
@@ -577,6 +578,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .ongoing-goals-list h5.sub-title {
@@ -797,6 +799,7 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  min-width: 0;
 }
 
 .finance-health-circle-wrapper {
@@ -817,6 +820,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .finance-summary-row {
@@ -901,6 +905,26 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .finance-col-health {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 16px;
+  }
+  .finance-summary-stats {
+    width: 100%;
+  }
+  .goals-split-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .ongoing-goals-list {
+    width: 100%;
+  }
 }
 
 

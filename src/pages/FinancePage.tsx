@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useDataContext, type Transaction, type SavingsGoal, type Bill } from '../context/DataContext';
+import { CustomSelect } from '../components/ui/CustomSelect';
+import { jsPDF } from 'jspdf';
 import './FinancePage.css';
 
 // Categories Configuration
@@ -31,6 +33,82 @@ const MONTHS = [
 ];
 
 const YEARS = ['2024', '2025', '2026', '2027', '2028', '2029', '2030'];
+
+const getExpenseCategoryIcon = (category: string): string => {
+  switch (category) {
+    case 'Food': return '🍕';
+    case 'Shopping': return '🛍️';
+    case 'Travel': return '✈️';
+    case 'Transportation': return '🚗';
+    case 'Fuel': return '⛽';
+    case 'Rent': return '🏠';
+    case 'Education': return '🎓';
+    case 'Books': return '📚';
+    case 'Subscriptions': return '📱';
+    case 'Entertainment': return '🎬';
+    case 'Medical': return '🏥';
+    case 'Bills': return '💵';
+    case 'Groceries': return '🛒';
+    case 'Electronics': return '💻';
+    case 'Investment': return '📈';
+    case 'Family': return '👨‍👩‍👧‍👦';
+    case 'Gifts': return '🎁';
+    case 'Savings': return '🐖';
+    default: return '⚙️';
+  }
+};
+
+const getIncomeCategoryIcon = (category: string): string => {
+  switch (category) {
+    case 'Salary': return '💼';
+    case 'Freelancing': return '💻';
+    case 'Internship': return '🎓';
+    case 'Scholarship': return '📜';
+    case 'Business': return '🏢';
+    case 'Pocket Money': return '🪙';
+    case 'Investments': return '📈';
+    default: return '⚙️';
+  }
+};
+
+const getPaymentMethodIcon = (method: string): string => {
+  switch (method) {
+    case 'Cash': return '💵';
+    case 'Credit Card': return '💳';
+    case 'Debit Card': return '💳';
+    case 'UPI': return '📱';
+    case 'Net Banking': return '🏦';
+    case 'PayPal': return '🌐';
+    default: return '⚙️';
+  }
+};
+
+const incomeCategoryOptions = INCOME_CATEGORIES.map(c => ({ label: c, value: c, icon: getIncomeCategoryIcon(c) }));
+const expenseCategoryOptions = EXPENSE_CATEGORIES.map(c => ({ label: c, value: c, icon: getExpenseCategoryIcon(c) }));
+const paymentMethodOptions = PAYMENT_METHODS.map(m => ({ label: m, value: m, icon: getPaymentMethodIcon(m) }));
+const monthSelectOptions = MONTHS.map(m => ({ label: m.label, value: m.value }));
+const yearSelectOptions = YEARS.map(y => ({ label: y, value: y }));
+const budgetCategoryOptions = EXPENSE_CATEGORIES.map(c => ({ label: c, value: c, icon: getExpenseCategoryIcon(c) }));
+
+const goalColorOptions = [
+  { label: 'Blue Glow', value: 'var(--accent-blue)', icon: '🔵' },
+  { label: 'Purple Glow', value: 'var(--accent-purple)', icon: '🟣' },
+  { label: 'Cyan Glow', value: 'var(--accent-cyan)', icon: '🟢' },
+  { label: 'Orange Glow', value: 'var(--accent-orange)', icon: '🟠' },
+  { label: 'Red Glow', value: 'var(--accent-red)', icon: '🔴' },
+  { label: 'Green Glow', value: 'var(--accent-green)', icon: '🟢' },
+];
+
+const billCategoryOptions = [
+  { label: 'Electricity', value: 'Electricity', icon: '⚡' },
+  { label: 'Internet', value: 'Internet', icon: '🌐' },
+  { label: 'Rent', value: 'Rent', icon: '🏠' },
+  { label: 'Credit Card', value: 'Credit Card', icon: '💳' },
+  { label: 'Insurance', value: 'Insurance', icon: '🛡️' },
+  { label: 'Phone recharge', value: 'Phone recharge', icon: '📱' },
+  { label: 'Water bill', value: 'Water bill', icon: '💧' },
+  { label: 'Other Bill', value: 'Other', icon: '📝' },
+];
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June', 
@@ -635,6 +713,150 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
 
   const totalMonthlySubscriptionCost = subscriptions.reduce((sum, s) => sum + Number(s.amount), 0);
 
+  const downloadPdfReport = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Colors
+      const primaryColor = [14, 22, 40]; // Dark blue #0E1628
+      const accentColor = [59, 130, 246]; // Blue #3B82F6
+      const greenColor = [16, 185, 129]; // Green #10B981
+      const redColor = [239, 68, 68]; // Red #EF4444
+      const textColor = [51, 51, 51]; // Dark grey
+      const lightBg = [245, 246, 248]; // Light grey background for tables
+
+      // ─── Header Section ───
+      // Decorative top bar
+      doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
+      doc.rect(0, 0, 210, 8, 'F');
+
+      // Title
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text('NovaLife Financial Report', 20, 25);
+
+      // Subtitle
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(110, 110, 110);
+      doc.text('Detailed performance analytics calculated automatically', 20, 31);
+
+      // Metadata (Date, day, time)
+      const now = new Date();
+      const dayName = now.toLocaleDateString(undefined, { weekday: 'long' });
+      const dateStr = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true });
+      doc.text(`Generated on: ${dayName}, ${dateStr} at ${timeStr}`, 20, 37);
+
+      // Horizontal separator line
+      doc.setDrawColor(220, 224, 230);
+      doc.setLineWidth(0.5);
+      doc.line(20, 42, 190, 42);
+
+      // ─── Financial Performance Summary Table ───
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text('Monthly Financial Performance Summary', 20, 52);
+
+      // Table Header Background
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(20, 58, 170, 10, 'F');
+      
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Metric Description', 25, 64);
+      doc.text('Value', 150, 64);
+
+      // Table Rows
+      const rows = [
+        { label: 'Total Income Generated', val: `₹${totals.income.toLocaleString()}`, color: greenColor },
+        { label: 'Total Expenses Logged', val: `-₹${totals.expense.toLocaleString()}`, color: redColor },
+        { label: 'Net Monthly Savings', val: `₹${totals.balance.toLocaleString()}`, color: primaryColor },
+        { label: 'Financial Health Score', val: `${financialHealthScore} / 100`, color: accentColor },
+        { label: 'Total Monthly Subscription Fees', val: `₹${totalMonthlySubscriptionCost.toLocaleString()}`, color: primaryColor }
+      ];
+
+      let yPos = 68;
+      rows.forEach((row, i) => {
+        // Zebra striping background
+        if (i % 2 === 0) {
+          doc.setFillColor(lightBg[0], lightBg[1], lightBg[2]);
+          doc.rect(20, yPos, 170, 10, 'F');
+        }
+
+        // Cell border
+        doc.setDrawColor(235, 238, 242);
+        doc.rect(20, yPos, 170, 10, 'S');
+
+        // Text
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        doc.text(row.label, 25, yPos + 6);
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setTextColor(row.color[0], row.color[1], row.color[2]);
+        doc.text(row.val, 150, yPos + 6);
+
+        yPos += 10;
+      });
+
+      // ─── Nova's Financial Advice ───
+      yPos += 12;
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text("Nova's Personalized Financial Advice", 20, yPos);
+
+      yPos += 6;
+      // Background box for AI Advice
+      doc.setFillColor(245, 243, 255); // Very light purple
+      doc.setDrawColor(216, 180, 254); // Light purple border
+      
+      const adviceText = loadingAiAdvice ? 'Nova is analyzing your recent cash flows...' : aiInsight;
+      
+      // Split text into lines for word wrapping in PDF
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      const splitAdvice = doc.splitTextToSize(adviceText, 160);
+      const boxHeight = splitAdvice.length * 5 + 10;
+      
+      doc.rect(20, yPos, 170, boxHeight, 'FD');
+
+      // Draw advice text lines
+      doc.setFont('Helvetica', 'normal');
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      let adviceY = yPos + 7;
+      splitAdvice.forEach((line: string) => {
+        doc.text(line, 25, adviceY);
+        adviceY += 5;
+      });
+
+      // ─── Footer Section ───
+      doc.setFont('Helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(160, 160, 160);
+      doc.text('NovaLife Productivity & Financial Engine — All rights reserved.', 20, 280);
+      doc.text('Page 1 of 1', 180, 280);
+
+      // Save PDF
+      const filename = `NovaLife_Financial_Report_${now.toISOString().substring(0, 10)}.pdf`;
+      doc.save(filename);
+      setShowReportModal(false);
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      alert('Failed to generate PDF report. Please try again.');
+    }
+  };
+
   return (
     <div className="finance-page">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -880,7 +1102,7 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
                     {filteredTransactions.map((t) => (
                       <tr key={t.id} className="tx-row">
                         <td>
-                          <div style={{ fontWeight: 'bold', color: 'white' }}>{t.merchant}</div>
+                          <div style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{t.merchant}</div>
                           {t.notes && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{t.notes}</div>}
                           {t.tags && t.tags.length > 0 && (
                             <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
@@ -896,7 +1118,7 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
                         <td style={{ color: 'var(--text-secondary)' }}>{t.category}</td>
                         <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{t.payment_method}</td>
                         <td style={{ color: 'var(--text-secondary)' }}>{formatMonthYear(t.date)}</td>
-                        <td style={{ fontWeight: 'bold', color: t.type === 'income' ? 'var(--accent-green)' : 'white' }}>
+                        <td style={{ fontWeight: 'bold', color: t.type === 'income' ? 'var(--accent-green)' : 'var(--text-primary)' }}>
                           {t.type === 'income' ? '+' : '-'}₹{t.amount.toLocaleString()}
                         </td>
                         <td>
@@ -1090,13 +1312,11 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Category</label>
-                  <select value={txCategory} onChange={e => setTxCategory(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {txType === 'income' ? (
-                      INCOME_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
-                    ) : (
-                      EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
-                    )}
-                  </select>
+                  <CustomSelect
+                    options={txType === 'income' ? incomeCategoryOptions : expenseCategoryOptions}
+                    value={txCategory}
+                    onChange={setTxCategory}
+                  />
                 </div>
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1106,24 +1326,30 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Payment Method</label>
-                  <select value={txMethod} onChange={e => setTxMethod(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={paymentMethodOptions}
+                    value={txMethod}
+                    onChange={setTxMethod}
+                  />
                 </div>
 
                 <div className="form-grid">
                   <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Month</label>
-                    <select value={txMonth} onChange={e => setTxMonth(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                      {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                    </select>
+                    <CustomSelect
+                      options={monthSelectOptions}
+                      value={txMonth}
+                      onChange={setTxMonth}
+                    />
                   </div>
 
                   <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Year</label>
-                    <select value={txYear} onChange={e => setTxYear(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                      {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
+                    <CustomSelect
+                      options={yearSelectOptions}
+                      value={txYear}
+                      onChange={setTxYear}
+                    />
                   </div>
                 </div>
               </div>
@@ -1161,9 +1387,11 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
             <form onSubmit={handleBudgetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Category</label>
-                <select value={budgetCategory} onChange={e => setBudgetCategory(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <CustomSelect
+                  options={budgetCategoryOptions}
+                  value={budgetCategory}
+                  onChange={setBudgetCategory}
+                />
               </div>
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Budget Limit (₹)</label>
@@ -1173,16 +1401,20 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
               <div className="form-grid">
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Month</label>
-                  <select value={budgetMonth} onChange={e => setBudgetMonth(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={monthSelectOptions}
+                    value={budgetMonth}
+                    onChange={setBudgetMonth}
+                  />
                 </div>
 
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Year</label>
-                  <select value={budgetYear} onChange={e => setBudgetYear(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={yearSelectOptions}
+                    value={budgetYear}
+                    onChange={setBudgetYear}
+                  />
                 </div>
               </div>
               <button type="submit" className="btn-primary" style={{ marginTop: '8px', padding: '12px' }}>Save Budget</button>
@@ -1220,28 +1452,29 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
               <div className="form-grid">
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Target Month</label>
-                  <select value={goalMonth} onChange={e => setGoalMonth(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={monthSelectOptions}
+                    value={goalMonth}
+                    onChange={setGoalMonth}
+                  />
                 </div>
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Target Year</label>
-                  <select value={goalYear} onChange={e => setGoalYear(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={yearSelectOptions}
+                    value={goalYear}
+                    onChange={setGoalYear}
+                  />
                 </div>
               </div>
 
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Theme Color</label>
-                <select value={goalColor} onChange={e => setGoalColor(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                  <option value="var(--accent-blue)">Blue Glow</option>
-                  <option value="var(--accent-purple)">Purple Glow</option>
-                  <option value="var(--accent-cyan)">Cyan Glow</option>
-                  <option value="var(--accent-orange)">Orange Glow</option>
-                  <option value="var(--accent-red)">Red Glow</option>
-                  <option value="var(--accent-green)">Green Glow</option>
-                </select>
+                <CustomSelect
+                  options={goalColorOptions}
+                  value={goalColor}
+                  onChange={setGoalColor}
+                />
               </div>
 
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1303,30 +1536,29 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
               <div className="form-grid">
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Due Month</label>
-                  <select value={billMonth} onChange={e => setBillMonth(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={monthSelectOptions}
+                    value={billMonth}
+                    onChange={setBillMonth}
+                  />
                 </div>
                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Due Year</label>
-                  <select value={billYear} onChange={e => setBillYear(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                    {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                  <CustomSelect
+                    options={yearSelectOptions}
+                    value={billYear}
+                    onChange={setBillYear}
+                  />
                 </div>
               </div>
 
               <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Category</label>
-                <select value={billCategory} onChange={e => setBillCategory(e.target.value)} style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', borderRadius: '6px', color: 'white' }}>
-                  <option value="Electricity">Electricity</option>
-                  <option value="Internet">Internet</option>
-                  <option value="Rent">Rent</option>
-                  <option value="Credit Card">Credit Card</option>
-                  <option value="Insurance">Insurance</option>
-                  <option value="Phone recharge">Phone recharge</option>
-                  <option value="Water bill">Water bill</option>
-                  <option value="Other">Other Bill</option>
-                </select>
+                <CustomSelect
+                  options={billCategoryOptions}
+                  value={billCategory}
+                  onChange={setBillCategory}
+                />
               </div>
 
               <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1383,7 +1615,7 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
               </div>
             </div>
 
-            <button className="btn-primary" onClick={() => { alert('Monthly report summary generated successfully!'); setShowReportModal(false); }} style={{ marginTop: '24px', width: '100%', padding: '12px' }}>Download Report</button>
+            <button className="btn-primary" onClick={downloadPdfReport} style={{ marginTop: '24px', width: '100%', padding: '12px' }}>Download Report</button>
           </div>
         </div>
       )}

@@ -12,6 +12,12 @@ const timezoneOptions = [
   { label: 'Asia/Tokyo (JST)', value: 'Asia/Tokyo (JST)', icon: '🌐' },
 ];
 
+const timeOptions = Array.from({ length: 24 }).map((_, i) => {
+  const hour = String(i).padStart(2, '0');
+  const label = i === 0 ? '12:00 AM' : i === 12 ? '12:00 PM' : i < 12 ? `${i}:00 AM` : `${i - 12}:00 PM`;
+  return { label, value: `${hour}:00`, icon: '⏰' };
+});
+
 const themes = [
   { name: 'Dark', color: '#070B14', accent: '#3B82F6' },
   { name: 'Light', color: '#FAF6F0', accent: '#4A90E2' },
@@ -30,7 +36,8 @@ export default function SettingsPage() {
   const [profileOccupation, setProfileOccupation] = useState('Student');
   const [profileWeeklyFocusTarget, setProfileFocusTarget] = useState(20);
   const [profileDailyTaskTarget, setProfileDailyTaskTarget] = useState(5);
-  const [profileAiCoachTone, setProfileAiCoachTone] = useState('Motivational');
+  const [profileWorkStartTime, setProfileWorkStartTime] = useState('09:00');
+  const [profileWorkEndTime, setProfileWorkEndTime] = useState('17:00');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileStatus, setProfileStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -72,7 +79,8 @@ export default function SettingsPage() {
       setProfileOccupation(user.occupation || 'Student');
       setProfileFocusTarget(user.weeklyFocusTarget || 20);
       setProfileDailyTaskTarget(user.dailyTaskTarget || 5);
-      setProfileAiCoachTone(user.aiCoachTone || 'Motivational');
+      setProfileWorkStartTime(user.workStartTime || '09:00');
+      setProfileWorkEndTime(user.workEndTime || '17:00');
     }
   }, [user]);
 
@@ -209,7 +217,8 @@ export default function SettingsPage() {
           occupation: profileOccupation,
           weeklyFocusTarget: profileWeeklyFocusTarget,
           dailyTaskTarget: profileDailyTaskTarget,
-          aiCoachTone: profileAiCoachTone
+          workStartTime: profileWorkStartTime,
+          workEndTime: profileWorkEndTime
         })
       });
       const data = await res.json();
@@ -221,7 +230,8 @@ export default function SettingsPage() {
           occupation: profileOccupation,
           weeklyFocusTarget: profileWeeklyFocusTarget,
           dailyTaskTarget: profileDailyTaskTarget,
-          aiCoachTone: profileAiCoachTone
+          workStartTime: profileWorkStartTime,
+          workEndTime: profileWorkEndTime
         });
         setProfileStatus({ text: 'Changes saved successfully.', type: 'success' });
       } else {
@@ -581,18 +591,23 @@ export default function SettingsPage() {
                       options={timezoneOptions}
                     />
                   </div>
-                  <div className="form-row">
-                    <label>AI Coach Tone</label>
-                    <CustomSelect
-                      value={profileAiCoachTone}
-                      onChange={setProfileAiCoachTone}
-                      options={[
-                        { label: 'Motivational & Inspiring', value: 'Motivational', icon: '🔥' },
-                        { label: 'Direct & Strict Coach', value: 'Strict', icon: '👊' },
-                        { label: 'Friendly & Supportive', value: 'Friendly', icon: '🤝' },
-                        { label: 'Data-driven & Analytical', value: 'Analytical', icon: '📊' },
-                      ]}
-                    />
+                  <div className="form-row-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-row">
+                      <label>Work Start Time</label>
+                      <CustomSelect
+                        value={profileWorkStartTime}
+                        onChange={setProfileWorkStartTime}
+                        options={timeOptions}
+                      />
+                    </div>
+                    <div className="form-row">
+                      <label>Work End Time</label>
+                      <CustomSelect
+                        value={profileWorkEndTime}
+                        onChange={setProfileWorkEndTime}
+                        options={timeOptions}
+                      />
+                    </div>
                   </div>
                   <div className="form-row">
                     <label>Daily Task Target</label>

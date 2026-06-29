@@ -12,6 +12,8 @@ export interface User {
   dailyTaskTarget?: number;
   aiCoachTone?: string;
   hasGoogleCalendar?: boolean;
+  workStartTime?: string;
+  workEndTime?: string;
 }
 
 interface AuthContextType {
