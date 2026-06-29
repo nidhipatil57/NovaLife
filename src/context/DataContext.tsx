@@ -1612,9 +1612,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Financial Health Score Calculation Engine
   const financialHealthScore = useMemo(() => {
-    if (!user || transactions.length === 0) return 75; // Neutral-high base
-
-    let score = 70; // Base score
+    if (!user) return 0;
+    
+    let totalScore = 0;
 
     // 1. Savings Rate (Weight: 30 points)
     const monthlyIncome = transactions
@@ -1624,19 +1624,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .filter(t => t.type === 'expense')
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
-    if (monthlyIncome > 0) {
+    if (transactions.length === 0) {
+      totalScore += 15; // Neutral baseline
+    } else if (monthlyIncome > 0) {
       const savingsRate = (monthlyIncome - monthlyExpenses) / monthlyIncome;
-      if (savingsRate >= 0.3) score += 30; // Excellent savings rate (30%+)
-      else if (savingsRate >= 0.1) score += 20; // Good savings rate (10%-30%)
-      else if (savingsRate >= 0) score += 10; // Positive savings rate
-      else score -= 15; // Overspending income
+      if (savingsRate >= 0.3) totalScore += 30; // Excellent savings rate (30%+)
+      else if (savingsRate >= 0.1) totalScore += 20; // Good savings rate (10%-30%)
+      else if (savingsRate >= 0) totalScore += 10; // Positive savings rate
+      else totalScore += 0; // Overspending income
     } else if (monthlyExpenses > 0) {
-      score -= 15; // Expenses with no income
+      totalScore += 0; // Expenses with no income
     } else {
-      score += 15;
+      totalScore += 15;
     }
 
-    // 2. Budget Discipline (Weight: 30 points)
+    // 2. Budget Discipline (Weight: 25 points)
     const currentMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
     const currentMonthBudgets = budgets.filter(b => b.month_year === currentMonthStr);
 
@@ -1651,30 +1653,60 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (currentMonthBudgets.length > 0) {
+      const overspentRatio = budgetsOverspentCount / currentMonthBudgets.length;
       if (budgetsOverspentCount === 0) {
-        score += 30;
+        totalScore += 25;
+      } else if (overspentRatio <= 0.25) {
+        totalScore += 15;
+      } else if (overspentRatio <= 0.5) {
+        totalScore += 10;
       } else {
-        score += Math.max(0, 30 - (budgetsOverspentCount * 10)); // Deduct 10 points per overspent budget
+        totalScore += 5;
       }
     } else {
-      score += 15; // Neutral point if no budgets defined
+      totalScore += 15; // Neutral point if no budgets defined
     }
 
-    // 3. Bill Payment Consistency (Weight: 40 points)
+    // 3. Bill Payment Consistency (Weight: 25 points)
     const unpaidBills = bills.filter(b => !b.paid);
     const missedBillsCount = unpaidBills.filter(b => {
       const due = new Date(b.due_date);
       return due.getTime() < Date.now();
     }).length;
 
-    if (missedBillsCount > 0) {
-      score -= (missedBillsCount * 15); // Deduct 15 points per overdue unpaid bill
+    if (bills.length > 0) {
+      const overdueRatio = missedBillsCount / bills.length;
+      if (missedBillsCount === 0) {
+        totalScore += 25;
+      } else if (overdueRatio <= 0.25) {
+        totalScore += 15;
+      } else if (overdueRatio <= 0.5) {
+        totalScore += 10;
+      } else {
+        totalScore += 0;
+      }
     } else {
-      score += 40; // No overdue unpaid bills
+      totalScore += 20; // Neutral point if no bills
     }
 
-    return Math.max(0, Math.min(100, score));
-  }, [transactions, budgets, bills, user]);
+    // 4. Savings Goals Progress (Weight: 20 points)
+    if (savingsGoals.length > 0) {
+      const totalProgress = savingsGoals.reduce((sum, sg) => {
+        const target = Number(sg.target_amount) || 1;
+        const saved = Number(sg.saved_amount) || 0;
+        return sum + Math.min(100, Math.round((saved / target) * 100));
+      }, 0);
+      const avgProgress = totalProgress / savingsGoals.length;
+      if (avgProgress >= 80) totalScore += 20;
+      else if (avgProgress >= 50) totalScore += 15;
+      else if (avgProgress >= 20) totalScore += 10;
+      else totalScore += 5;
+    } else {
+      totalScore += 15; // Neutral point if no savings goals
+    }
+
+    return Math.max(0, Math.min(100, totalScore));
+  }, [transactions, budgets, bills, savingsGoals, user]);
 
   // Central Productivity Scoring Engine (recalculates automatically on any activity update, blended with Financial Health)
   const productivityScore = useMemo(() => {

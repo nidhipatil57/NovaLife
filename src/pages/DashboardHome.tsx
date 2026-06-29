@@ -266,11 +266,11 @@ function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
           deadlines.map((d, i) => (
             <div key={i} className={`deadline-row urgency-${isOverdue(d) || d.priority === 'critical' ? 'critical' : 'high'}`}>
               <div className="dl-indicator"></div>
-              <div className="dl-info">
-                <span className="dl-task">{d.text}</span>
-                <span className="dl-due" style={isOverdue(d) ? { color: 'var(--accent-red)', fontWeight: 'bold' } : {}}>
+              <div className="dl-info" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, gap: '2px', minWidth: 0 }}>
+                <div className="dl-task">{d.text}</div>
+                <div className="dl-due" style={isOverdue(d) ? { color: 'var(--accent-red)', fontWeight: 'bold' } : {}}>
                   {isOverdue(d) ? '⚠️ Overdue! ' : ''}{d.due}
-                </span>
+                </div>
               </div>
               {(d.priority === 'critical' || isOverdue(d)) && <span className="dl-badge">🚨</span>}
             </div>

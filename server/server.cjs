@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const app = express();
@@ -151,6 +152,8 @@ pool.connect(async (err, client, release) => {
           ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_focus_target INTEGER DEFAULT 20;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_task_target INTEGER DEFAULT 5;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_coach_tone TEXT DEFAULT 'Motivational';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS work_start_time VARCHAR(10) DEFAULT '09:00';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS work_end_time VARCHAR(10) DEFAULT '17:00';
           ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_sites JSONB DEFAULT '{"Instagram": true, "YouTube": true, "Twitter": true, "Reddit": false}';
           ALTER TABLE events ADD COLUMN IF NOT EXISTS google_event_id VARCHAR(255);
           
@@ -740,7 +743,7 @@ app.post('/api/auth/google/disconnect', authenticateToken, async (req, res) => {
 // Get Current Logged-in User Profile
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone FROM users WHERE id = $1', [req.user.id]);
+    const result = await pool.query('SELECT id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone, work_start_time, work_end_time FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -758,6 +761,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
         weeklyFocusTarget: user.weekly_focus_target || 20,
         dailyTaskTarget: user.daily_task_target || 5,
         aiCoachTone: user.ai_coach_tone || 'Motivational',
+        workStartTime: user.work_start_time || '09:00',
+        workEndTime: user.work_end_time || '17:00',
         hasGoogleCalendar: !!user.google_refresh_token
       },
     });
@@ -769,7 +774,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // Update User Profile (displayName, bio, timezone, avatarUrl, occupation, weeklyFocusTarget, dailyTaskTarget, aiCoachTone)
 app.put('/api/auth/profile', authenticateToken, async (req, res) => {
-  const { displayName, bio, timezone, avatarUrl, occupation, weeklyFocusTarget, dailyTaskTarget, aiCoachTone } = req.body;
+  const { displayName, bio, timezone, avatarUrl, occupation, weeklyFocusTarget, dailyTaskTarget, aiCoachTone, workStartTime, workEndTime } = req.body;
   if (!displayName) {
     return res.status(400).json({ error: 'Display Name is required.' });
   }
@@ -783,20 +788,22 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
       currentAvatarUrl = avatarUrl;
     }
 
-    const userRes = await pool.query('SELECT occupation, weekly_focus_target, daily_task_target, ai_coach_tone FROM users WHERE id = $1', [req.user.id]);
+    const userRes = await pool.query('SELECT occupation, weekly_focus_target, daily_task_target, ai_coach_tone, work_start_time, work_end_time FROM users WHERE id = $1', [req.user.id]);
     const currentInfo = userRes.rows[0] || {};
 
     const finalOccupation = occupation !== undefined ? occupation : (currentInfo.occupation || 'Student');
     const finalWeeklyFocus = weeklyFocusTarget !== undefined ? parseInt(weeklyFocusTarget) : (currentInfo.weekly_focus_target || 20);
     const finalDailyTask = dailyTaskTarget !== undefined ? parseInt(dailyTaskTarget) : (currentInfo.daily_task_target || 5);
     const finalAiCoach = aiCoachTone !== undefined ? aiCoachTone : (currentInfo.ai_coach_tone || 'Motivational');
+    const finalWorkStart = workStartTime !== undefined ? workStartTime : (currentInfo.work_start_time || '09:00');
+    const finalWorkEnd = workEndTime !== undefined ? workEndTime : (currentInfo.work_end_time || '17:00');
 
     const result = await pool.query(
       `UPDATE users 
-       SET name = $1, bio = $2, timezone = $3, avatar_url = $4, occupation = $5, weekly_focus_target = $6, daily_task_target = $7, ai_coach_tone = $8 
-       WHERE id = $9 
-       RETURNING id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone`,
-      [displayName, bio || '', timezone || 'Asia/Kolkata (IST)', currentAvatarUrl, finalOccupation, finalWeeklyFocus, finalDailyTask, finalAiCoach, req.user.id]
+       SET name = $1, bio = $2, timezone = $3, avatar_url = $4, occupation = $5, weekly_focus_target = $6, daily_task_target = $7, ai_coach_tone = $8, work_start_time = $9, work_end_time = $10 
+       WHERE id = $11 
+       RETURNING id, name, email, google_refresh_token, bio, timezone, avatar_url, occupation, weekly_focus_target, daily_task_target, ai_coach_tone, work_start_time, work_end_time`,
+      [displayName, bio || '', timezone || 'Asia/Kolkata (IST)', currentAvatarUrl, finalOccupation, finalWeeklyFocus, finalDailyTask, finalAiCoach, finalWorkStart, finalWorkEnd, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -817,6 +824,8 @@ app.put('/api/auth/profile', authenticateToken, async (req, res) => {
         weeklyFocusTarget: user.weekly_focus_target,
         dailyTaskTarget: user.daily_task_target,
         aiCoachTone: user.ai_coach_tone,
+        workStartTime: user.work_start_time,
+        workEndTime: user.work_end_time,
         hasGoogleCalendar: !!user.google_refresh_token
       }
     });

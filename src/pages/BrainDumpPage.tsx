@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useGoals } from '../hooks/useGoals';
 import { useHabits } from '../hooks/useHabits';
-import { useCalendarEvents } from '../hooks/useCalendarEvents';
 import './BrainDumpPage.css';
 
-type ParsedItem = { text: string; type: 'task' | 'goal' | 'event' | 'habit'; priority: string; icon: string };
+type ParsedItem = { text: string; type: 'task' | 'goal' | 'habit'; priority: string; icon: string };
 
 export default function BrainDumpPage() {
   const [input, setInput] = useState('');
@@ -17,7 +16,6 @@ export default function BrainDumpPage() {
   const { addTask, user } = useTasks();
   const { addGoal } = useGoals();
   const { addHabit } = useHabits();
-  const { addEvent } = useCalendarEvents();
 
   const processDump = () => {
     if (!input.trim()) return;
@@ -33,7 +31,7 @@ export default function BrainDumpPage() {
         if (lower.includes('gym') || lower.includes('exercise') || lower.includes('run') || lower.includes('meditat') || lower.includes('yoga') || lower.includes('stretch') || lower.includes('water'))
           return { text: item, type: 'habit', priority: 'medium', icon: '🔄' };
         if (lower.includes('meeting') || lower.includes('interview') || lower.includes('appointment') || lower.includes('call') || lower.includes('class') || lower.includes('lecture'))
-          return { text: item, type: 'event', priority: 'high', icon: '📅' };
+          return { text: item, type: 'task', priority: 'medium', icon: '📝' };
         if (lower.includes('learn') || lower.includes('become') || lower.includes('improve') || lower.includes('goal') || lower.includes('master') || lower.includes('achieve'))
           return { text: item, type: 'goal', priority: 'medium', icon: '🎯' };
         if (lower.includes('buy') || lower.includes('groceries') || lower.includes('shop') || lower.includes('pay') || lower.includes('bill') || lower.includes('rent'))
@@ -84,16 +82,6 @@ export default function BrainDumpPage() {
               color: 'var(--accent-cyan)',
             });
             break;
-          case 'event':
-            await addEvent({
-              title: item.text,
-              start: 10,
-              duration: 1,
-              day: (new Date().getDay()),
-              color: 'var(--accent-blue)',
-              type: 'meeting',
-            });
-            break;
         }
       }
       setSaved(true);
@@ -111,7 +99,7 @@ export default function BrainDumpPage() {
       <div className="page-header">
         <div>
           <h2>🧠 <span className="gradient-text">Brain Dump</span></h2>
-          <p>Dump everything from your mind. AI instantly organizes it into tasks, goals, events, and habits.</p>
+          <p>Dump everything from your mind. AI instantly organizes it into tasks, goals, and habits.</p>
         </div>
       </div>
 
@@ -134,7 +122,7 @@ export default function BrainDumpPage() {
             className="braindump-textarea"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Exam next week, buy groceries, gym tomorrow, project deadline friday, learn python, meeting with professor, pay electricity bill, meditate daily, interview prep..."
+            placeholder="Exam next week, buy groceries, gym tomorrow, project deadline friday, learn python, pay electricity bill, meditate daily..."
             rows={6}
           />
 
@@ -200,13 +188,13 @@ export default function BrainDumpPage() {
           )}
 
           <div className="results-grid">
-            {['task', 'event', 'goal', 'habit'].map(type => {
+            {['task', 'goal', 'habit'].map(type => {
               const items = results.filter(r => r.type === type);
               if (items.length === 0) return null;
               return (
                 <div key={type} className={`result-group widget result-${type}`}>
                   <h4 className="result-group-title">
-                    {type === 'task' ? '📝 Tasks' : type === 'event' ? '📅 Calendar Events' : type === 'goal' ? '🎯 Goals' : '🔄 Habits'}
+                    {type === 'task' ? '📝 Tasks' : type === 'goal' ? '🎯 Goals' : '🔄 Habits'}
                     <span className="result-count">{items.length}</span>
                   </h4>
                   <div className="result-items">
@@ -234,7 +222,7 @@ export default function BrainDumpPage() {
           <div className="example-flow">
             <div className="example-input">
               <p className="example-label">You type:</p>
-              <p className="example-text">"Exam next week, buy groceries, gym, interview, learn python"</p>
+              <p className="example-text">"Exam next week, buy groceries, gym, learn python"</p>
             </div>
             <div className="example-arrow">✨ AI Magic ✨</div>
             <div className="example-output">
@@ -243,7 +231,6 @@ export default function BrainDumpPage() {
                 <span className="example-tag tag-task">📝 Exam Prep — Task (High)</span>
                 <span className="example-tag tag-task">📝 Buy Groceries — Task (Low)</span>
                 <span className="example-tag tag-habit">🔄 Gym — Habit</span>
-                <span className="example-tag tag-event">📅 Interview — Event</span>
                 <span className="example-tag tag-goal">🎯 Learn Python — Goal</span>
               </div>
             </div>

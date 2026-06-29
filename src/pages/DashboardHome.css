@@ -266,19 +266,56 @@
 }
 
 .deadline-row {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-3); border-radius: var(--radius-md); background: rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--glass-border);
 }
 
-.dl-indicator { width: 4px; height: 32px; border-radius: 2px; flex-shrink: 0; }
+.dl-indicator {
+  width: 4px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
 .urgency-critical .dl-indicator { background: var(--accent-red); box-shadow: 0 0 8px var(--accent-red); }
 .urgency-high .dl-indicator { background: var(--accent-orange); }
 .urgency-medium .dl-indicator { background: var(--accent-blue); }
 
-.dl-info { flex: 1; }
-.dl-task { font-size: var(--text-sm); color: var(--text-primary); display: block; font-weight: var(--font-medium); }
-.dl-due { font-size: var(--text-xs); color: var(--text-tertiary); }
-.dl-badge { font-size: 14px; animation: scalePulse 1.5s ease-in-out infinite; }
+.dl-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.dl-task {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+.dl-due {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dl-badge {
+  font-size: 14px;
+  animation: scalePulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+  margin-left: 6px;
+  display: inline-flex;
+}
 
 /* ─── Goal Compact ─── */
 .goal-list-compact {
@@ -363,7 +400,7 @@
 /* ─── Widget Themes & Hover Glows ─── */
 .widget-tasks {
   border-color: rgba(59, 130, 246, 0.12) !important;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-tasks:hover {
   border-color: rgba(59, 130, 246, 0.35) !important;
@@ -373,7 +410,7 @@
 
 .widget-score-home {
   border-color: rgba(139, 92, 246, 0.12) !important;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-score-home:hover {
   border-color: rgba(139, 92, 246, 0.35) !important;
@@ -386,7 +423,7 @@
 
 .widget-deadlines {
   border-color: rgba(239, 68, 68, 0.12) !important;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-deadlines:hover {
   border-color: rgba(239, 68, 68, 0.35) !important;
@@ -396,7 +433,7 @@
 
 .widget-goals {
   border-color: rgba(236, 72, 153, 0.12) !important;
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-goals:hover {
   border-color: rgba(236, 72, 153, 0.35) !important;
@@ -406,7 +443,7 @@
 
 .widget-habits {
   border-color: rgba(16, 185, 129, 0.12) !important;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-habits:hover {
   border-color: rgba(16, 185, 129, 0.35) !important;
@@ -416,7 +453,7 @@
 
 .widget-ai-suggestions {
   border-color: rgba(6, 182, 212, 0.12) !important;
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.04) 0%, rgba(10, 15, 30, 0.2) 100%) !important;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.04) 0%, var(--bg-card-gradient-end) 100%) !important;
 }
 .widget-ai-suggestions:hover {
   border-color: rgba(6, 182, 212, 0.35) !important;

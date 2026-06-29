@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarEvents, type CalendarEvent } from '../hooks/useCalendarEvents';
 import { useTasks } from '../hooks/useTasks';
-import { useDataContext } from '../context/DataContext';
 import { CustomSelect } from '../components/ui/CustomSelect';
+import { useAuth } from '../context/AuthContext';
 import './CalendarPage.css';
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -65,45 +65,31 @@ const getEmojiForType = (type: string) => {
 export default function CalendarPage() {
   const { events, loading: eventsLoading, addEvent, deleteEvent, updateEvent, user } = useCalendarEvents();
   const { tasks, loading: tasksLoading } = useTasks();
-  const { goals } = useDataContext();
   const navigate = useNavigate();
+  const { updateUser } = useAuth();
 
-  const isGoalTickedTimeline = (() => {
-    const goalsWithDeadlines = goals.filter(g => g.completed_by);
-    if (goalsWithDeadlines.length === 0) return false;
-    
-    for (const goal of goalsWithDeadlines) {
-      if (!goal.completed_by) continue;
-      const start = goal.created_at ? new Date(goal.created_at) : new Date();
-      const end = new Date(goal.completed_by);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(0, 0, 0, 0);
-      
-      const requiredDates: string[] = [];
-      const curr = new Date(start);
-      const target = new Date(end);
-      if (!isNaN(curr.getTime()) && !isNaN(target.getTime()) && curr <= target) {
-        let count = 0;
-        while (curr <= target && count < 2000) {
-          const y = curr.getFullYear();
-          const m = String(curr.getMonth() + 1).padStart(2, '0');
-          const d = String(curr.getDate()).padStart(2, '0');
-          requiredDates.push(`${y}-${m}-${d}`);
-          curr.setDate(curr.getDate() + 1);
-          count++;
+  const handleDisconnectGoogle = async () => {
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const res = await fetch('/api/auth/google/disconnect', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+      if (res.ok) {
+        updateUser({ hasGoogleCalendar: false });
       }
-      
-      if (requiredDates.length > 0) {
-        const completedSet = new Set(goal.completed_dates || []);
-        const allTicked = requiredDates.every(dateStr => completedSet.has(dateStr));
-        if (!allTicked) return false;
-      } else {
-        return false;
-      }
+    } catch (e) {
+      console.error(e);
     }
-    return true;
-  })();
+  };
+
+  const handleConnectGoogle = () => {
+    window.location.href = `/api/auth/google/connect?token=${localStorage.getItem('novalife_token')}`;
+  };
+
+
   
   const [view, setView] = useState<'week' | 'month' | 'day'>('week');
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
@@ -707,7 +693,7 @@ export default function CalendarPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0 }}>📅 <span className="gradient-text">Calendar</span></h2>
-              {user?.hasGoogleCalendar && isGoalTickedTimeline && (
+              {user?.hasGoogleCalendar ? (
                 <div className="gcal-status-badge" style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -722,9 +708,73 @@ export default function CalendarPage() {
                   boxShadow: '0 2px 10px rgba(16, 185, 129, 0.1)',
                   position: 'relative'
                 }}>
-                  <span className="green-lighting-dot" />
-                  Google Calendar is connected. All data and events are synced
+                  <span className="green-lighting-dot" style={{
+                    width: '6px',
+                    height: '6px',
+                    backgroundColor: '#10b981',
+                    borderRadius: '50%',
+                    display: 'inline-block',
+                    boxShadow: '0 0 8px #10b981'
+                  }} />
+                  synced with google calendar
+                  <button 
+                    onClick={handleDisconnectGoogle}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      color: '#ef4444',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      marginLeft: '4px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                    }}
+                  >
+                    Disconnect
+                  </button>
                 </div>
+              ) : (
+                <button 
+                  onClick={handleConnectGoogle}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    color: 'white',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  Connect with Google Calendar
+                </button>
               )}
             </div>
             <p style={{ marginTop: '4px' }}>AI-powered scheduling — auto time-blocking, conflict detection, and smart planning.</p>
@@ -1141,13 +1191,7 @@ export default function CalendarPage() {
             <span className="stat-label">Urgent Deadlines</span>
           </div>
         </div>
-        <div className={`stat-item ${conflictsCount > 0 ? 'has-conflict' : 'no-conflict'}`}>
-          <div className="stat-icon">{conflictsCount > 0 ? '⚠️' : '✅'}</div>
-          <div className="stat-details">
-            <span className="stat-value">{conflictsCount} {conflictsCount === 1 ? 'conflict' : 'conflicts'}</span>
-            <span className="stat-label">Time Overlaps</span>
-          </div>
-        </div>
+
       </div>
 
       {/* Task Overlay Strip — incomplete tasks reminder */}

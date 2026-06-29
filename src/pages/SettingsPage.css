@@ -208,11 +208,12 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .settings-input {
   padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-primary);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   color: var(--text-primary);

@@ -95,7 +95,7 @@
 .braindump-textarea {
   width: 100%;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-primary);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
@@ -265,7 +265,6 @@
 }
 
 .result-task { border-left: 3px solid var(--accent-blue); }
-.result-event { border-left: 3px solid var(--accent-purple); }
 .result-goal { border-left: 3px solid var(--accent-green); }
 .result-habit { border-left: 3px solid var(--accent-cyan); }
 
@@ -342,7 +341,7 @@
   flex: 1;
   min-width: 200px;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-primary);
   border-radius: var(--radius-lg);
 }
 

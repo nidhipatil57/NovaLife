@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useHabits, type Habit } from '../hooks/useHabits';
-import { streamGeminiContent } from '../utils/aiClient';
 import './HabitsPage.css';
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -34,8 +33,7 @@ export default function HabitsPage() {
   // AI Habit Coach states
   const [habitAnalysis, setHabitAnalysis] = useState<any>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
-  const [habitQuestions, setHabitQuestions] = useState<{ q: string; a: string; loading: boolean }[]>([]);
-  const [customQuestion, setCustomQuestion] = useState('');
+
 
   // Run automatically on mount/loading finish if habits exist
   useEffect(() => {
@@ -92,44 +90,7 @@ You MUST respond with a JSON object matching this exact schema. Do not write any
     }
   };
 
-  const handleAskHabitQuestion = async (qText: string) => {
-    if (!qText.trim()) return;
-    const qTrimmed = qText.trim();
-    const newEntry = { q: qTrimmed, a: '', loading: true };
-    setHabitQuestions(prev => [...prev, newEntry]);
-    setCustomQuestion('');
 
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API Key is not configured');
-
-      const systemPrompt = `You are "Nova", an elite habit coach. Help the user with their habit question: "${qTrimmed}"
-Current habits tracked: ${JSON.stringify(habits.map(h => ({ name: h.name, rate: h.rate, streak: h.streak })))}
-
-Answer in a natural, premium coach conversational tone. Frame task priorities as full sentences (never say '[MEDIUM]'). Do not use markdown headers (#, ##). Write 1-2 tactical paragraphs. Use lists only for distinct recommendations.`;
-
-      const requestBody = {
-        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
-      };
-
-      let accumulated = '';
-      const onChunk = (chunk: string) => {
-        accumulated += chunk;
-        setHabitQuestions(prev => prev.map(item => 
-          item.q === qTrimmed ? { ...item, a: accumulated, loading: false } : item
-        ));
-      };
-
-      await streamGeminiContent(apiKey, requestBody, onChunk);
-
-    } catch (err: any) {
-      console.error('Habit question failed:', err);
-      setHabitQuestions(prev => prev.map(item => 
-        item.q === qTrimmed ? { ...item, a: `⚠️ Failed to get answer: ${err.message}`, loading: false } : item
-      ));
-    }
-  };
 
   const [habitToDelete, setHabitToDelete] = useState<{ id: string; name: string } | null>(null);
 
@@ -385,86 +346,6 @@ Answer in a natural, premium coach conversational tone. Frame task priorities as
                 </div>
               )}
 
-              {/* Habit Q&A Section */}
-              <div className="habit-qa-block" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' }}>
-                <h5 style={{ fontWeight: 'bold', marginBottom: '12px' }}>Ask Habit Strategist</h5>
-                
-                <div className="quick-questions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
-                  {[
-                    "Which habit has helped me the most?",
-                    "Why did I lose my streak?",
-                    "What habit should I focus on this week?",
-                    "Which habit affects my productivity the most?",
-                    "Am I becoming more consistent?"
-                  ].map((q, idx) => (
-                    <button 
-                      key={idx} 
-                      className="ai-suggestion-chip" 
-                      onClick={() => handleAskHabitQuestion(q)}
-                      style={{ fontSize: '11px', padding: '4px 10px', cursor: 'pointer' }}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-
-                {habitQuestions.length > 0 && (
-                  <div className="qa-history" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px', maxHeight: '250px', overflowY: 'auto' }}>
-                    {habitQuestions.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '12px', alignSelf: 'flex-end', fontSize: '12px', maxWidth: '85%' }}>
-                          {item.q}
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-start', maxWidth: '90%' }}>
-                          <div className="ai-avatar-inner" style={{ width: '20px', height: '20px', flexShrink: 0, marginTop: '2px' }}></div>
-                          <div style={{ background: 'rgba(59,130,246,0.03)', border: '1px solid rgba(59,130,246,0.08)', padding: '10px 12px', borderRadius: '12px', fontSize: '12px', lineHeight: '1.5' }}>
-                            {item.loading ? (
-                              <div className="typing" style={{ display: 'flex', gap: '4px', padding: '4px 0' }}>
-                                <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
-                                <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
-                                <span className="typing-dot" style={{ width: '5px', height: '5px' }}></span>
-                              </div>
-                            ) : (
-                              item.a.split('\n').map((line, lidx) => (
-                                <p key={lidx} style={{ margin: line.trim() === '' ? '8px 0' : '4px 0' }}>
-                                  {line.split('**').map((part, pidx) => pidx % 2 === 1 ? <strong key={pidx}>{part}</strong> : part)}
-                                </p>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input 
-                    type="text"
-                    value={customQuestion}
-                    onChange={e => setCustomQuestion(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAskHabitQuestion(customQuestion)}
-                    placeholder="Ask habit strategist anything..."
-                    style={{
-                      flex: 1,
-                      padding: '8px 12px',
-                      background: 'rgba(0,0,0,0.2)',
-                      border: '1px solid var(--glass-border)',
-                      borderRadius: 'var(--radius-md)',
-                      color: 'white',
-                      fontSize: '12px',
-                      outline: 'none'
-                    }}
-                  />
-                  <button 
-                    className="btn-primary btn-sm"
-                    onClick={() => handleAskHabitQuestion(customQuestion)}
-                    style={{ padding: '8px 16px', fontSize: '12px' }}
-                  >
-                    Ask
-                  </button>
-                </div>
-              </div>
             </>
           )}
         </div>

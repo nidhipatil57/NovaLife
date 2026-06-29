@@ -11,6 +11,7 @@
   --bg-card: rgba(14, 22, 40, 0.6);
   --bg-card-hover: rgba(14, 22, 40, 0.8);
   --bg-elevated: rgba(16, 24, 39, 0.8);
+  --bg-card-gradient-end: rgba(10, 15, 30, 0.2);
 
   /* ─── Accent Colors ─── */
   --accent-blue: #3B82F6;
@@ -167,6 +168,7 @@
   --bg-card: rgba(243, 235, 225, 0.7);
   --bg-card-hover: rgba(243, 235, 225, 0.9);
   --bg-elevated: rgba(234, 224, 211, 0.9);
+  --bg-card-gradient-end: rgba(243, 235, 225, 0.4);
 
   /* Accent Colors */
   --accent-blue: #4A90E2;
