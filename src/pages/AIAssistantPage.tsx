@@ -87,7 +87,15 @@ export default function AIAssistantPage() {
     aiInput: input,
     setAiInput: setInput,
     aiSearchQuery: searchQuery,
-    setAiSearchQuery: setSearchQuery
+    setAiSearchQuery: setSearchQuery,
+    aiScrollTop,
+    setAiScrollTop,
+    aiPinnedExpanded,
+    setAiPinnedExpanded,
+    aiRecentExpanded,
+    setAiRecentExpanded,
+    aiInputCursorPos,
+    setAiInputCursorPos
   } = useDataContext();
 
   const [isTyping, setIsTyping] = useState(false);
@@ -105,41 +113,102 @@ export default function AIAssistantPage() {
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const lastMessageRef = useRef<HTMLDivElement>(null);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasRestoredScrollRef = useRef<string | null>(null);
+  const isRestoringScrollRef = useRef<boolean>(false);
+
   // When user sends a message, set this to false so we scroll to the incoming AI response
   // Otherwise on mount/load, keep it true so we don't scroll
   const hasScrolledForResponseRef = useRef(true);
 
-  // Auto-scroll chat area: scroll to top of AI message, but bottom of user message
+  // 1. Listen for scroll events to record position in real-time
+  useEffect(() => {
+    const el = chatAreaRef.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      if (!isRestoringScrollRef.current) {
+        setAiScrollTop(el.scrollTop);
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+    };
+  }, [setAiScrollTop]);
+
+  // 2. Auto-scroll chat area: scroll to top of AI message, but bottom of user message
   useEffect(() => {
     if (messages.length === 0) return;
     const lastMsg = messages[messages.length - 1];
     
     if (lastMsg.role === 'user') {
-      // User sent message: scroll to bottom
+      // User sent message: scroll to bottom to show their message + typing indicator
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     } else if (lastMsg.role === 'model' && !hasScrolledForResponseRef.current && lastMsg.text.length > 0) {
-      // AI sent response: scroll so the TOP of the AI bubble is visible at the top of the scrollable container
+      // AI response started arriving: scroll so the TOP of the AI bubble is visible
       hasScrolledForResponseRef.current = true;
-      lastMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Use a small delay to let the DOM render the bubble before scrolling
+      setTimeout(() => {
+        lastMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
     }
   }, [messages]);
 
-  // When AI typing indicator starts, scroll to bottom
+  // 3. When AI typing indicator starts, keep the user's message area visible
+  //    (don't scroll to absolute bottom — that causes a jarring jump when AI response arrives)
   useEffect(() => {
     if (isTyping) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [isTyping]);
 
-
-  // Scroll to bottom by default on mount or when activeConvId changes
+  // 4. Restore scroll position robustly ONLY ONCE when messages are loaded
   useEffect(() => {
-    const scrollTimer = setTimeout(() => {
-      if (bottomRef.current) {
-        bottomRef.current.scrollIntoView({ behavior: 'auto' });
-      }
-    }, 80);
-    return () => clearTimeout(scrollTimer);
+    if (!activeConvId) return;
+    if (messages.length === 0 && loadingConversations) return;
+
+    if (hasRestoredScrollRef.current !== activeConvId) {
+      const el = chatAreaRef.current;
+      if (!el) return;
+
+      isRestoringScrollRef.current = true;
+      const restore = () => {
+        if (aiScrollTop > 0) {
+          el.scrollTop = aiScrollTop;
+        } else if (bottomRef.current) {
+          bottomRef.current.scrollIntoView({ behavior: 'auto' });
+        }
+        hasRestoredScrollRef.current = activeConvId;
+        isRestoringScrollRef.current = false;
+      };
+
+      restore();
+      const t1 = setTimeout(restore, 50);
+      const t2 = setTimeout(restore, 150);
+      const t3 = setTimeout(restore, 300);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [messages, activeConvId, loadingConversations]);
+
+  // 5. Restore cursor position in the input field
+  useEffect(() => {
+    const inputEl = inputRef.current;
+    if (inputEl) {
+      // Small timeout to allow input rendering and focus
+      const t = setTimeout(() => {
+        if (document.activeElement !== inputEl) {
+          inputEl.focus();
+        }
+        inputEl.setSelectionRange(aiInputCursorPos, aiInputCursorPos);
+      }, 50);
+      return () => clearTimeout(t);
+    }
   }, [activeConvId]);
 
   // Load initial conversation if available
@@ -203,16 +272,32 @@ export default function AIAssistantPage() {
       })
       .join('\n');
 
-    // Limit to 5 habits
+    // Limit to top 10 completed tasks for history analysis
+    const completedTasksText = tasks
+      .filter(t => t.done)
+      .slice(0, 10)
+      .map(t => `- [${t.priority.toUpperCase()}] ${t.text} (Category: ${t.category})`)
+      .join('\n');
+    const totalCompletedTasksCount = tasks.filter(t => t.done).length;
+
+    // Limit to 10 habits
     const habitsText = habits
-      .slice(0, 5)
-      .map(h => `- ${h.name} (Goal: ${h.target}, Streak: ${h.streak} days, Completion Rate: ${h.rate}%)`)
+      .slice(0, 10)
+      .map(h => `- ${h.name} (Goal: ${h.target}, Streak: ${h.streak} days, Best Streak: ${h.best} days, Completion Rate: ${h.rate}%, Color: ${h.color})`)
       .join('\n');
 
-    // Limit to 5 active goals
+    // Goals & closest goal to completion
+    const incompleteGoals = goals.filter(g => g.progress < 100);
+    const closestGoal = incompleteGoals.length > 0
+      ? incompleteGoals.reduce((max, g) => g.progress > max.progress ? g : max, incompleteGoals[0])
+      : null;
+    const closestGoalText = closestGoal
+      ? `Goal Closest to Completion: "${closestGoal.name}" (${closestGoal.progress}% progress, category: ${closestGoal.category})`
+      : "No goals currently incomplete.";
+
+    // Limit to 10 active goals
     const goalsText = goals
-      .filter(g => g.progress < 100)
-      .slice(0, 5)
+      .slice(0, 10)
       .map(g => `- ${g.name} (Category: ${g.category}, Progress: ${g.progress}%${g.milestones && g.milestones.length > 0 ? `, Milestones: ${g.milestones.map((m: any) => m.text + (m.done ? ' [done]' : '')).join(', ')}` : ''})`)
       .join('\n');
 
@@ -222,12 +307,40 @@ export default function AIAssistantPage() {
       .map(e => `- ${e.title} (Type: ${e.type}, Day of Week: ${e.day}, Start Hour: ${e.start}, Duration: ${e.duration} hours)`)
       .join('\n');
 
+    // Focus Sessions Calculations
+    const totalFocusSessionsCount = focusSessions.length;
+    const totalFocusMinutes = focusSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60;
     const lastSessions = focusSessions.slice(0, 5);
-    const focusText = `Total Focus Sessions Logged: ${focusSessions.length}. Recent Focus Time: ${Math.round(lastSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60)} minutes in the last ${lastSessions.length} sessions.`;
+    const focusText = `Total Focus Sessions Logged: ${totalFocusSessionsCount}. Total Focus Time: ${Math.round(totalFocusMinutes)} minutes. Recent Focus Time: ${Math.round(lastSessions.reduce((acc, s) => acc + (s.duration || 0), 0) / 60)} minutes in the last ${lastSessions.length} sessions.`;
 
-    // Compute Finance Summary details
+    // Compute Finance Summary details (monthly and category breakdown)
     const balance = transactions.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
     const currentMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+    
+    // Category Breakdown Expenses
+    const monthlyExpensesByCategory: Record<string, number> = {};
+    transactions
+      .filter(t => t.type === 'expense' && t.date.startsWith(currentMonthStr))
+      .forEach(t => {
+        const cat = t.category || 'General';
+        monthlyExpensesByCategory[cat] = (monthlyExpensesByCategory[cat] || 0) + Number(t.amount);
+      });
+    const categoryBreakdownText = Object.entries(monthlyExpensesByCategory)
+      .map(([cat, amt]) => `- ${cat}: ₹${amt.toLocaleString()}`)
+      .join('\n');
+
+    // Category Breakdown Income
+    const monthlyIncomeByCategory: Record<string, number> = {};
+    transactions
+      .filter(t => t.type === 'income' && t.date.startsWith(currentMonthStr))
+      .forEach(t => {
+        const cat = t.category || 'General';
+        monthlyIncomeByCategory[cat] = (monthlyIncomeByCategory[cat] || 0) + Number(t.amount);
+      });
+    const incomeBreakdownText = Object.entries(monthlyIncomeByCategory)
+      .map(([cat, amt]) => `- ${cat}: ₹${amt.toLocaleString()}`)
+      .join('\n');
+
     const monthlyExpenses = transactions.filter(t => t.type === 'expense' && t.date.startsWith(currentMonthStr)).reduce((sum, t) => sum + Number(t.amount), 0);
     const savingsGoalsSummary = savingsGoals.map(g => `- ${g.name} (Saved ₹${g.saved_amount} of ₹${g.target_amount}, Progress: ${Math.round((Number(g.saved_amount)/Number(g.target_amount))*100)}%)`).join('\n');
     const overspentBudgets = budgets.filter(b => {
@@ -238,7 +351,8 @@ export default function AIAssistantPage() {
     const now = new Date();
     const formattedDateTime = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-    return `You are "Nova", an elite productivity coach and AI life assistant.
+    return `You are "Nova", a world-class executive strategist, productivity consultant, and elite life coach. You have been working with this user for a long time. You know their patterns, strengths, blind spots, and ambitions intimately. Every response should reflect that depth of understanding.
+
 The user's name is ${userDisplayName}.
 The current real-world date and time is: ${formattedDateTime}.
 
@@ -246,28 +360,101 @@ Here is their real-time application data:
 - Productivity/Life Score: ${productivityScore}/100
 - Active Tasks:
 ${activeTasksText || "No active tasks."}
+- Recently Completed Tasks (Total Completed: ${totalCompletedTasksCount}):
+${completedTasksText || "No completed tasks."}
 - Habits:
 ${habitsText || "No habits set up."}
 - Goals:
 ${goalsText || "No goals set up."}
+- Goal Closest to Completion:
+${closestGoalText}
 - Calendar Events:
 ${eventsText || "No calendar events."}
 - Focus Sessions:
 ${focusText}
 - Finance Overview: Available Balance is ₹${balance.toLocaleString()}, Current Monthly Expenses is ₹${monthlyExpenses.toLocaleString()}, Financial Health Index is ${financialHealthScore}/100.
+- Monthly Expense Breakdown by Category:
+${categoryBreakdownText || "No expenses logged this month."}
+- Monthly Income Breakdown by Category:
+${incomeBreakdownText || "No income logged this month."}
 - Savings Goals Roadmap progress:
 ${savingsGoalsSummary || "No savings goals configured."}
 - Overspent budgets: ${overspentBudgets || "None"}
 
-CRITICAL FORMATTING INSTRUCTIONS:
-1. Always sound like a natural, conversational, intelligent, and premium human life coach. Avoid robotic, template-like, or overly structured answers.
-2. DO NOT use markdown symbols like "#", "##", "###", or "***" for section headers or decorative markers. Frame natural titles or just use inline bolding (e.g., "**My Recommendations**") if needed.
-3. DO NOT output brackets or tags for task priorities (e.g., do NOT write "[MEDIUM] meeting" or "[HIGH] task"). Instead, seamlessly integrate priorities into your sentences (e.g., "you should complete the meeting, which is of medium priority" or "your high priority task...").
-4. Write in cohesive, well-written paragraphs. Use bullet points ONLY when they genuinely improve readability (e.g. listing distinct action items, options, or recommendations).
-5. Always analyze the user's actual database records provided above before responding to give hyper-personalized advice. Avoid generic advice or placeholders.
-6. If a task has "[OVERDUE!]" next to its due date, point out that it is overdue and prompt the user to complete or reschedule it, without dwelling on it.
-7. You have complete access to the user's actual finance information. If they ask about their balance, spending, budgets, or savings goals, answer them accurately using their real transaction records rather than placeholders.
-8. CRITICAL: DO NOT output any thinking process, drafting notes, checklists, planning steps, check-offs, or reasoning blocks. Your response must contain ONLY the final conversational message that the user reads, starting directly with the greeting (e.g., 'Hey Nidhi!'). Do not prefix or suffix your response with any other text. Do not output anything other than the final response.`;
+═══════════════════════════════════════════════
+CRITICAL BEHAVIOR & REASONING GUIDELINES
+═══════════════════════════════════════════════
+
+**CORE PRINCIPLE: NEVER NARRATE THE DASHBOARD.**
+Do NOT simply summarize, read values one by one, repeat, or list statistics exactly as they exist above. The user can already see those numbers on their screen. Your responsibility is to INTERPRET them, REASON about them, identify MEANINGFUL PATTERNS, prioritize what ACTUALLY MATTERS, explain WHY something deserves attention, and provide ACTIONABLE guidance.
+
+**ANTI-PATTERNS — Never produce responses like:**
+- "You have three tasks."
+- "Your productivity score is 94."
+- "You spent ₹500 on Food." (Unless directly answering a specific cost query, interpret what it means, compare with budget, etc.)
+- "You have an interview at 7 AM."
+The user already knows this. Instead, explain what these things MEAN.
+
+**WHAT TO DO INSTEAD:**
+- Instead of describing data, ANALYZE it.
+- Instead of repeating numbers, explain what those numbers MEAN.
+- Instead of mentioning every metric, discuss ONLY the ones relevant to the user's question or current situation.
+- Every response MUST contain reasoning and strategic coaching advice.
+
+**REASONING EXAMPLES:**
+- If the user has a high productivity score but several overdue tasks, explain that consistency is good but backlog management needs attention.
+- If focus hours decrease while completed tasks remain high, explain the user may be rushing work instead of entering deep work.
+- If habit streaks improve but productivity decreases, explain possible reasons instead of simply reporting both metrics.
+- If expenses suddenly increase, identify which category changed the most and discuss possible causes.
+
+**CROSS-MODULE CONNECTIONS — Always connect different parts of NovaLife together when relevant:**
+- Tasks should influence Goals (e.g., stalled tasks blocking goal progress).
+- Habits should influence Productivity (e.g., consistent routines correlating with higher scores).
+- Focus Sessions should influence Analytics (e.g., deep work sessions improving task completion rates).
+- Finance should influence Savings Goals (e.g., overspending in a category jeopardizing a savings target).
+- Calendar should influence Task Planning (e.g., a packed schedule making it unrealistic to clear a backlog today).
+Do NOT discuss every module in every response. Only mention modules that help answer the user's question.
+
+**PROACTIVE OBSERVATIONS — Make observations the user might NOT have noticed. Examples:**
+- "I've noticed your productivity stays high even when you carry overdue work. That suggests you're consistently working, but you're probably taking on more than you can realistically finish."
+- "You tend to complete habits even during busy weeks, which is an excellent sign because it means your routines remain stable under pressure."
+- "When your focus time exceeds two hours, your task completion rate increases significantly. Scheduling one deep work session today would likely help reduce your backlog."
+
+**INFORMATION PRIORITIZATION:**
+1. Urgent matters ALWAYS appear first (upcoming interviews, critical overdue tasks, imminent deadlines).
+2. Long-term insights appear afterwards.
+3. Minor observations appear only if they add value.
+
+**NATURAL CONVERSATIONAL FLOW — Every response should flow like a conversation, not a report.**
+Instead of: "You have an interview at 7 AM."
+Say: "With only a few hours remaining before your interview, everything else can wait. Spending even the next hour reviewing likely questions will have a much bigger impact than trying to clear overdue tasks right now."
+
+**ENCOURAGEMENT POLICY:**
+- NEVER use generic motivational clichés like "You've got this!", "Keep going!", "Stay positive!", "Great job!", "Keep up the good work!"
+- Instead, give MEANINGFUL encouragement based on REAL PROGRESS. Reference specific data, patterns, or improvements you've observed.
+
+**TONE:**
+- Sound calm, intelligent, highly observant, and thoughtful.
+- Feel less like a chatbot and more like an experienced strategist who understands the user's work, habits, goals, finances, and long-term ambitions.
+- Every answer should leave the user feeling that you genuinely understood their situation rather than simply reading information from a database.
+
+═══════════════════════════════════════════════
+CRITICAL RESPONSE FORMATTING RULES (STRICT!)
+═══════════════════════════════════════════════
+1. NEVER start any response with markdown headings like "#", "##", "###", "####", etc.
+2. NEVER use markdown symbols like "#", "##", "###", or "***" for section headers or decorative markers. Frame natural titles or just use inline bolding (e.g., "**My Recommendations**") if needed.
+3. DO NOT use nested bullet points or structured lists excessively. Write in cohesive, well-written paragraphs. Use bullet points ONLY when listing distinct action items, options, comparisons, or recommendations to improve readability.
+4. DO NOT output brackets or tags for task priorities (e.g., do NOT write "[HIGH] task"). Seamlessly weave priorities into your paragraphs.
+5. DO NOT output any thinking process, checklists, planning steps, or reasoning blocks. Your response must contain ONLY the final conversational message that the user reads, starting directly with the greeting/conversational text.`;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+    setAiInputCursorPos(e.target.selectionStart || 0);
+  };
+
+  const handleInputSelectionUpdate = (e: React.SyntheticEvent<HTMLInputElement>) => {
+    setAiInputCursorPos(e.currentTarget.selectionStart || 0);
   };
 
   const handleSendMessage = async (text?: string) => {
@@ -443,8 +630,15 @@ CRITICAL FORMATTING INSTRUCTIONS:
         <div className="sidebar-lists-container">
           {pinnedConvs.length > 0 && (
             <div className="sidebar-section">
-              <span className="sidebar-section-header">📌 Pinned Chats</span>
-              {pinnedConvs.map(conv => (
+              <span 
+                className="sidebar-section-header collapsible" 
+                onClick={() => setAiPinnedExpanded(!aiPinnedExpanded)}
+                style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+              >
+                <span>📌 Pinned Chats</span>
+                <span style={{ fontSize: '9px', opacity: 0.7 }}>{aiPinnedExpanded ? '▼' : '▶'}</span>
+              </span>
+              {aiPinnedExpanded && pinnedConvs.map(conv => (
                 <div
                   key={conv.id}
                   className={`sidebar-chat-item ${activeConvId === conv.id ? 'active' : ''}`}
@@ -513,77 +707,86 @@ CRITICAL FORMATTING INSTRUCTIONS:
           )}
 
           <div className="sidebar-section">
-            <span className="sidebar-section-header">🕒 Recent Chats</span>
-            {loadingConversations ? (
-              <p className="sidebar-loading-text">Loading chats...</p>
-            ) : recentConvs.length === 0 && pinnedConvs.length === 0 ? (
-              <p className="sidebar-empty-text">No conversations yet.</p>
-            ) : (
-              recentConvs.map(conv => (
-                <div
-                  key={conv.id}
-                  className={`sidebar-chat-item ${activeConvId === conv.id ? 'active' : ''}`}
-                  onClick={() => setActiveConvId(conv.id)}
-                >
-                  {editingConvId === conv.id ? (
-                    <input
-                      type="text"
-                      className="chat-item-rename-input"
-                      value={editTitleInput}
-                      onChange={e => setEditTitleInput(e.target.value)}
-                      onBlur={() => handleSaveRename(conv.id)}
-                      onKeyDown={e => e.key === 'Enter' && handleSaveRename(conv.id)}
-                      autoFocus
-                      onClick={e => e.stopPropagation()}
-                    />
-                  ) : (
-                    <>
-                      <span className="chat-item-title">💬 {conv.title}</span>
-                      <div className="chat-item-actions" onClick={e => e.stopPropagation()}>
-                        <button 
-                          className={`chat-action-btn pin-btn ${conv.pinned ? 'pinned' : ''}`}
-                          onClick={(e) => handleTogglePin(conv, e)} 
-                          title={conv.pinned ? "Unpin Chat" : "Pin Chat"}
-                        >
-                          📌
-                        </button>
-                        <div className="menu-container" style={{ position: 'relative' }}>
+            <span 
+              className="sidebar-section-header collapsible" 
+              onClick={() => setAiRecentExpanded(!aiRecentExpanded)}
+              style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+            >
+              <span>🕒 Recent Chats</span>
+              <span style={{ fontSize: '9px', opacity: 0.7 }}>{aiRecentExpanded ? '▼' : '▶'}</span>
+            </span>
+            {aiRecentExpanded && (
+              loadingConversations ? (
+                <p className="sidebar-loading-text">Loading chats...</p>
+              ) : recentConvs.length === 0 && pinnedConvs.length === 0 ? (
+                <p className="sidebar-empty-text">No conversations yet.</p>
+              ) : (
+                recentConvs.map(conv => (
+                  <div
+                    key={conv.id}
+                    className={`sidebar-chat-item ${activeConvId === conv.id ? 'active' : ''}`}
+                    onClick={() => setActiveConvId(conv.id)}
+                  >
+                    {editingConvId === conv.id ? (
+                      <input
+                        type="text"
+                        className="chat-item-rename-input"
+                        value={editTitleInput}
+                        onChange={e => setEditTitleInput(e.target.value)}
+                        onBlur={() => handleSaveRename(conv.id)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveRename(conv.id)}
+                        autoFocus
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        <span className="chat-item-title">💬 {conv.title}</span>
+                        <div className="chat-item-actions" onClick={e => e.stopPropagation()}>
                           <button 
-                            className="chat-action-btn dots-btn" 
-                            onClick={(e) => handleToggleMenu(conv.id, e)} 
-                            title="Chat Options"
+                            className={`chat-action-btn pin-btn ${conv.pinned ? 'pinned' : ''}`}
+                            onClick={(e) => handleTogglePin(conv, e)} 
+                            title={conv.pinned ? "Unpin Chat" : "Pin Chat"}
                           >
-                            ⋮
+                            📌
                           </button>
-                          {activeMenuConvId === conv.id && (
-                            <div className="chat-options-dropdown">
-                              <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  setActiveMenuConvId(null); 
-                                  handleStartRename(conv, e); 
-                                }}
-                              >
-                                ✏️ Rename
-                              </button>
-                              <button 
-                                onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  setActiveMenuConvId(null); 
-                                  handlePromptDelete(conv.id, e); 
-                                }}
-                                className="delete-option"
-                              >
-                                🗑️ Delete
-                              </button>
-                            </div>
-                          )}
+                          <div className="menu-container" style={{ position: 'relative' }}>
+                            <button 
+                              className="chat-action-btn dots-btn" 
+                              onClick={(e) => handleToggleMenu(conv.id, e)} 
+                              title="Chat Options"
+                            >
+                              ⋮
+                            </button>
+                            {activeMenuConvId === conv.id && (
+                              <div className="chat-options-dropdown">
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setActiveMenuConvId(null); 
+                                    handleStartRename(conv, e); 
+                                  }}
+                                >
+                                  ✏️ Rename
+                                </button>
+                                <button 
+                                  onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    setActiveMenuConvId(null); 
+                                    handlePromptDelete(conv.id, e); 
+                                  }}
+                                  className="delete-option"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
+                      </>
+                    )}
+                  </div>
+                ))
+              )
             )}
           </div>
         </div>
@@ -657,8 +860,12 @@ CRITICAL FORMATTING INSTRUCTIONS:
         {/* Input */}
         <div className="ai-input-bar">
           <input
+            ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={handleInputChange}
+            onSelect={handleInputSelectionUpdate}
+            onKeyUp={handleInputSelectionUpdate}
+            onMouseUp={handleInputSelectionUpdate}
             onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
             placeholder="Ask Nova AI Coach anything..."
           />
