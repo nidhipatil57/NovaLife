@@ -163,6 +163,17 @@ pool.connect(async (err, client, release) => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           );
           
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS room VARCHAR(50) DEFAULT 'forest';
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS task_id INT;
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS goal_id INT;
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS focus_score INT DEFAULT 100;
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS completion_status VARCHAR(50) DEFAULT 'completed';
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS ai_reflection TEXT DEFAULT '';
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS distractions_count INT DEFAULT 0;
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS achievements JSONB DEFAULT '[]';
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS session_goal TEXT DEFAULT '';
+          ALTER TABLE focus_sessions ADD COLUMN IF NOT EXISTS completed_subtasks JSONB DEFAULT '[]';
+
           CREATE TABLE IF NOT EXISTS conversations (
             id SERIAL PRIMARY KEY,
             user_id INT REFERENCES users(id) ON DELETE CASCADE,
@@ -1254,17 +1265,93 @@ app.get('/api/focus-sessions', authenticateToken, async (req, res) => {
 
 // Add Focus Session
 app.post('/api/focus-sessions', authenticateToken, async (req, res) => {
-  const { name, notes, duration } = req.body;
+  const { 
+    name, notes, duration, room, task_id, goal_id, 
+    focus_score, completion_status, ai_reflection, 
+    distractions_count, achievements, session_goal, completed_subtasks 
+  } = req.body;
   try {
     const result = await pool.query(
-      `INSERT INTO focus_sessions (user_id, name, notes, duration) 
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [req.user.id, name, notes || '', duration]
+      `INSERT INTO focus_sessions (
+        user_id, name, notes, duration, room, task_id, goal_id, 
+        focus_score, completion_status, ai_reflection, 
+        distractions_count, achievements, session_goal, completed_subtasks
+      ) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+      [
+        req.user.id, 
+        name, 
+        notes || '', 
+        duration, 
+        room || 'forest', 
+        task_id || null, 
+        goal_id || null, 
+        focus_score || 100, 
+        completion_status || 'completed', 
+        ai_reflection || '', 
+        distractions_count || 0, 
+        JSON.stringify(achievements || []), 
+        session_goal || '', 
+        JSON.stringify(completed_subtasks || [])
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Error adding focus session:', err);
     res.status(500).json({ error: 'Error creating focus session.' });
+  }
+});
+
+// Update Focus Session
+app.put('/api/focus-sessions/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { 
+    name, notes, duration, room, task_id, goal_id, 
+    focus_score, completion_status, ai_reflection, 
+    distractions_count, achievements, session_goal, completed_subtasks 
+  } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE focus_sessions 
+       SET name = COALESCE($3, name),
+           notes = COALESCE($4, notes),
+           duration = COALESCE($5, duration),
+           room = COALESCE($6, room),
+           task_id = COALESCE($7, task_id),
+           goal_id = COALESCE($8, goal_id),
+           focus_score = COALESCE($9, focus_score),
+           completion_status = COALESCE($10, completion_status),
+           ai_reflection = COALESCE($11, ai_reflection),
+           distractions_count = COALESCE($12, distractions_count),
+           achievements = COALESCE($13, achievements),
+           session_goal = COALESCE($14, session_goal),
+           completed_subtasks = COALESCE($15, completed_subtasks)
+       WHERE user_id = $1 AND id = $2 RETURNING *`,
+      [
+        req.user.id,
+        id,
+        name,
+        notes,
+        duration,
+        room,
+        task_id,
+        goal_id,
+        focus_score,
+        completion_status,
+        ai_reflection,
+        distractions_count,
+        achievements ? JSON.stringify(achievements) : null,
+        session_goal,
+        completed_subtasks ? JSON.stringify(completed_subtasks) : null
+      ]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Focus session not found or unauthorized.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating focus session:', err);
+    res.status(500).json({ error: 'Error updating focus session.' });
   }
 });
 

@@ -12,6 +12,16 @@ export interface FocusSession {
   notes: string;
   duration: number; // in seconds
   created_at: string;
+  room?: string;
+  task_id?: number | null;
+  goal_id?: number | null;
+  focus_score?: number;
+  completion_status?: string;
+  ai_reflection?: string;
+  distractions_count?: number;
+  achievements?: string[] | string;
+  session_goal?: string;
+  completed_subtasks?: string[] | string;
 }
 
 export interface Conversation {
@@ -114,6 +124,7 @@ interface DataContextType {
   loadingFocusSessions: boolean;
   addFocusSession: (session: Omit<FocusSession, 'id' | 'created_at'>) => Promise<void>;
   deleteFocusSession: (id: string) => Promise<void>;
+  updateFocusSession: (id: string, updates: Partial<FocusSession>) => Promise<boolean>;
 
   // Conversations
   conversations: Conversation[];
@@ -1195,6 +1206,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateFocusSession = async (id: string, updates: Partial<FocusSession>) => {
+    if (!user) return false;
+    try {
+      const token = localStorage.getItem('novalife_token');
+      const response = await fetch(`/api/focus-sessions/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setFocusSessions((prev) =>
+          prev.map((s) => (String(s.id) === String(id) ? { ...s, ...updated } : s))
+        );
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Error updating focus session:', err);
+      return false;
+    }
+  };
+
   // Conversation Actions
   const addConversation = async (title?: string) => {
     if (!user) return undefined;
@@ -1676,6 +1714,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         loadingFocusSessions,
         addFocusSession,
         deleteFocusSession,
+        updateFocusSession,
         conversations,
         loadingConversations,
         addConversation,
