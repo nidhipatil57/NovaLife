@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../context/DataContext';
 import './FocusPage.css';
 
@@ -20,28 +20,19 @@ const sounds = [
   { name: 'Ocean', icon: '🌊', url: 'https://cdn.jsdelivr.net/gh/YoyoZhang24/RelaX50@master/audios/sea.mp3' },
 ];
 
-const defaultBlockedSites = [
-  { name: 'Instagram', icon: '📸' },
-  { name: 'YouTube', icon: '▶️' },
-  { name: 'Twitter', icon: '🐦' },
-  { name: 'Reddit', icon: '🔴' },
-  { name: 'TikTok', icon: '🎵' },
-];
-
 export default function FocusPage() {
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeSounds, setActiveSounds] = useState<string[]>([]);
-  const [blockedSites, setBlockedSites] = useState<Record<string, boolean>>({
-    Instagram: true, YouTube: true, Twitter: true, Reddit: false, TikTok: true,
-  });
   
   const location = useLocation();
+  const navigate = useNavigate();
   const [activeTaskName, setActiveTaskName] = useState(location.state?.taskName || '');
 
   useEffect(() => {
     if (location.state?.taskName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTaskName(location.state.taskName);
     }
   }, [location.state]);
@@ -73,10 +64,10 @@ export default function FocusPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioPlayersRef = useRef<Record<string, HTMLAudioElement | null>>({});
 
-  // Cleanup audio players on unmount
   useEffect(() => {
+    const currentAudioPlayers = audioPlayersRef.current;
     return () => {
-      Object.values(audioPlayersRef.current).forEach(player => {
+      Object.values(currentAudioPlayers).forEach(player => {
         if (player) {
           player.pause();
         }
@@ -187,9 +178,7 @@ export default function FocusPage() {
     }
   };
 
-  const toggleBlockedSite = (name: string) => {
-    setBlockedSites(prev => ({ ...prev, [name]: !prev[name] }));
-  };
+
 
   const formatTimeDigits = (totalSeconds: number) => {
     const hrs = Math.floor(totalSeconds / 3600);
@@ -424,20 +413,55 @@ export default function FocusPage() {
             </div>
           </div>
 
-          {/* Website Blocker */}
-          <div className="widget focus-blocker">
-            <div className="widget-header"><h4>🚫 Website Blocker</h4></div>
-            <div className="blocked-list">
-              {defaultBlockedSites.map(site => (
-                <div key={site.name} className="blocked-item" onClick={() => toggleBlockedSite(site.name)}>
-                  <span>{site.icon} {site.name}</span>
-                  <div className={`block-toggle ${blockedSites[site.name] ? 'on' : ''}`}>
-                    <div className="toggle-thumb"></div>
+          {/* Collaborative Focus Rooms */}
+          <div className="widget focus-rooms-widget">
+            <div className="widget-header"><h4>👥 Collaborative Focus Rooms</h4></div>
+            <p className="rooms-subtitle">Join virtual study/work rooms for shared accountability & focus.</p>
+            <div className="rooms-list">
+              <div className="room-item" onClick={() => navigate('/focus/room/forest')}>
+                <div className="room-info">
+                  <span className="room-icon">🌲</span>
+                  <div className="room-details">
+                    <span className="room-name">Deep Work Forest</span>
+                    <span className="room-desc">Ambient rain & wind</span>
                   </div>
                 </div>
-              ))}
+                <button className="join-room-btn">Join</button>
+              </div>
+
+              <div className="room-item" onClick={() => navigate('/focus/room/cafe')}>
+                <div className="room-info">
+                  <span className="room-icon">☕</span>
+                  <div className="room-details">
+                    <span className="room-name">Lofi Study Cafe</span>
+                    <span className="room-desc">Cozy chatter & lofi beats</span>
+                  </div>
+                </div>
+                <button className="join-room-btn">Join</button>
+              </div>
+
+              <div className="room-item" onClick={() => navigate('/focus/room/library')}>
+                <div className="room-info">
+                  <span className="room-icon">🌧️</span>
+                  <div className="room-details">
+                    <span className="room-name">Rainy Library</span>
+                    <span className="room-desc">Absolute quiet & key clicks</span>
+                  </div>
+                </div>
+                <button className="join-room-btn">Join</button>
+              </div>
+
+              <div className="room-item" onClick={() => navigate('/focus/room/space')}>
+                <div className="room-info">
+                  <span className="room-icon">🌌</span>
+                  <div className="room-details">
+                    <span className="room-name">Cosmic Observatory</span>
+                    <span className="room-desc">Stellar hum & stars</span>
+                  </div>
+                </div>
+                <button className="join-room-btn">Join</button>
+              </div>
             </div>
-            <p className="blocker-note">Visual only — blocks are simulated</p>
           </div>
         </div>
       </div>
@@ -457,14 +481,9 @@ export default function FocusPage() {
             <span className="focus-stat-lbl">Sessions Done</span>
           </div>
           <div className="focus-stat-card">
-            <span className="focus-stat-icon">🕐</span>
-            <span className="focus-stat-val">Active Tracker</span>
-            <span className="focus-stat-lbl">Peak Hours</span>
-          </div>
-          <div className="focus-stat-card">
-            <span className="focus-stat-icon">🚫</span>
-            <span className="focus-stat-val">{Object.values(blockedSites).filter(Boolean).length}</span>
-            <span className="focus-stat-lbl">Sites Blocked</span>
+            <span className="focus-stat-icon">👥</span>
+            <span className="focus-stat-val">4</span>
+            <span className="focus-stat-lbl">Active Rooms</span>
           </div>
         </div>
       </div>

@@ -16,6 +16,95 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Website Blocker Configuration and Logic
+const hostsPath = process.platform === 'win32'
+  ? 'C:\\Windows\\System32\\drivers\\etc\\hosts'
+  : '/etc/hosts';
+
+const domainMapping = {
+  Instagram: ['instagram.com', 'www.instagram.com'],
+  YouTube: ['youtube.com', 'www.youtube.com', 'youtu.be', 'www.youtu.be'],
+  Twitter: ['twitter.com', 'www.twitter.com', 'x.com', 'www.x.com'],
+  Reddit: ['reddit.com', 'www.reddit.com']
+};
+
+function updateHostsFile(siteName, isBlocked) {
+  const domains = domainMapping[siteName];
+  if (!domains) return { success: true };
+
+  try {
+    let content = '';
+    try {
+      content = fs.readFileSync(hostsPath, 'utf8');
+    } catch (readErr) {
+      if (readErr.code === 'ENOENT') {
+        content = '';
+      } else {
+        throw readErr;
+      }
+    }
+    
+    const lines = content.split(/\r?\n/);
+    const os = require('os');
+    const eol = os.EOL;
+
+    // Filter out existing entries for these domains
+    let newLines = lines.filter(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return true;
+      const parts = trimmed.split(/\s+/);
+      if (parts.length >= 2) {
+        const domain = parts[1].toLowerCase();
+        if (domains.includes(domain)) return false;
+      }
+      return true;
+    });
+
+    if (isBlocked) {
+      domains.forEach(domain => {
+        newLines.push(`127.0.0.1 ${domain}`);
+      });
+    }
+
+    fs.writeFileSync(hostsPath, newLines.join(eol), 'utf8');
+    console.log(`Successfully updated hosts file for ${siteName}. Blocked: ${isBlocked}`);
+    return { success: true };
+  } catch (err) {
+    console.error(`Error updating hosts file for ${siteName}:`, err.message);
+    return { success: false, error: err.message, code: err.code };
+  }
+}
+
+async function syncHostsFileOnStartup() {
+  try {
+    const result = await pool.query('SELECT blocked_sites FROM users');
+    const aggregatedBlocks = {};
+    
+    result.rows.forEach(row => {
+      let blockedSites = row.blocked_sites;
+      if (blockedSites) {
+        if (typeof blockedSites === 'string') {
+          blockedSites = JSON.parse(blockedSites);
+        }
+        Object.entries(blockedSites).forEach(([site, blocked]) => {
+          if (blocked) {
+            aggregatedBlocks[site] = true;
+          }
+        });
+      }
+    });
+
+    // For each site in our mapping, update hosts file
+    Object.keys(domainMapping).forEach(site => {
+      const shouldBlock = !!aggregatedBlocks[site];
+      updateHostsFile(site, shouldBlock);
+    });
+    console.log('Successfully synchronized hosts file with database on startup.');
+  } catch (err) {
+    console.error('Error synchronizing hosts file on startup:', err.message);
+  }
+}
+
 // Neon PostgreSQL Connection Pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -62,6 +151,7 @@ pool.connect(async (err, client, release) => {
           ALTER TABLE users ADD COLUMN IF NOT EXISTS weekly_focus_target INTEGER DEFAULT 20;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_task_target INTEGER DEFAULT 5;
           ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_coach_tone TEXT DEFAULT 'Motivational';
+          ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked_sites JSONB DEFAULT '{"Instagram": true, "YouTube": true, "Twitter": true, "Reddit": false}';
           ALTER TABLE events ADD COLUMN IF NOT EXISTS google_event_id VARCHAR(255);
           
           CREATE TABLE IF NOT EXISTS focus_sessions (
@@ -150,6 +240,8 @@ pool.connect(async (err, client, release) => {
     } finally {
       release();
     }
+    // Synchronize hosts file blocks on server startup
+    syncHostsFileOnStartup();
   }
 });
 
@@ -1639,6 +1731,76 @@ app.delete('/api/finance/bills/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error deleting bill:', err);
     res.status(500).json({ error: 'Error deleting bill.' });
+  }
+});
+
+
+// Website Blocker Endpoints
+app.get('/api/blocker', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT blocked_sites FROM users WHERE id = $1', [req.user.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    
+    let blockedSites = result.rows[0].blocked_sites;
+    if (!blockedSites) {
+      blockedSites = { Instagram: true, YouTube: true, Twitter: true, Reddit: false };
+    } else if (typeof blockedSites === 'string') {
+      blockedSites = JSON.parse(blockedSites);
+    }
+    
+    // Ensure TikTok is removed from returned state
+    if (blockedSites && 'TikTok' in blockedSites) {
+      delete blockedSites.TikTok;
+    }
+
+    res.json({ blockedSites });
+  } catch (err) {
+    console.error('Error fetching blocked sites:', err);
+    res.status(500).json({ error: 'Error fetching blocked sites.' });
+  }
+});
+
+app.post('/api/blocker', authenticateToken, async (req, res) => {
+  const { name, blocked } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'Site name is required.' });
+  }
+
+  try {
+    // 1. Fetch current blocked sites
+    const userRes = await pool.query('SELECT blocked_sites FROM users WHERE id = $1', [req.user.id]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    let blockedSites = userRes.rows[0].blocked_sites || {};
+    if (typeof blockedSites === 'string') {
+      blockedSites = JSON.parse(blockedSites);
+    }
+
+    // 2. Update state
+    blockedSites[name] = !!blocked;
+    delete blockedSites.TikTok;
+
+    await pool.query('UPDATE users SET blocked_sites = $1 WHERE id = $2', [JSON.stringify(blockedSites), req.user.id]);
+
+    // 3. Update hosts file
+    const hostsRes = updateHostsFile(name, !!blocked);
+
+    if (!hostsRes.success) {
+      return res.json({
+        success: true,
+        warning: 'Saved selection, but failed to write to hosts file due to permission restrictions. Please run the server with Administrator privileges to enable actual site blocking.',
+        error: hostsRes.error
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error toggling blocked site:', err);
+    res.status(500).json({ error: 'Error updating blocked site.' });
   }
 });
 
