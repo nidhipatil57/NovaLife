@@ -56,33 +56,73 @@ export default function DashboardLayout() {
 
   const mainRef = useRef<HTMLDivElement>(null);
   const scrollPositionsRef = useRef<Record<string, number>>({});
-  const prevPathnameRef = useRef<string>(location.pathname);
+  const isRestoringRef = useRef<boolean>(false);
 
-  // Preserve scroll position of .dash-main per route
+  // 1. Listen for scroll events to record position in real-time
   useEffect(() => {
     const mainElement = mainRef.current;
     if (!mainElement) return;
 
-    // Save scroll position for the previous route
-    const prevPath = prevPathnameRef.current;
-    if (prevPath !== location.pathname) {
-      scrollPositionsRef.current[prevPath] = mainElement.scrollTop;
-    }
-
-    // Update prev pathname ref
-    prevPathnameRef.current = location.pathname;
-
-    // Restore scroll position for the current route
-    const targetScrollTop = scrollPositionsRef.current[location.pathname] || 0;
-
-    // Wait a brief moment for the new page components to finish mounting
-    const timer = setTimeout(() => {
-      if (mainRef.current) {
-        mainRef.current.scrollTop = targetScrollTop;
+    const handleScroll = () => {
+      const currentScroll = mainElement.scrollTop;
+      // Do not record 0 scroll position if we are currently restoring scroll
+      if (currentScroll > 0 || (!isRestoringRef.current && currentScroll === 0)) {
+        scrollPositionsRef.current[location.pathname] = currentScroll;
       }
-    }, 80);
+    };
 
-    return () => clearTimeout(timer);
+    mainElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      mainElement.removeEventListener('scroll', handleScroll);
+    };
+  }, [location.pathname]);
+
+  // 2. Restore scroll position for the current route robustly
+  useEffect(() => {
+    const mainElement = mainRef.current;
+    if (!mainElement) return;
+
+    const targetScrollTop = scrollPositionsRef.current[location.pathname] || 0;
+    isRestoringRef.current = true;
+
+    let attempts = 0;
+    const maxAttempts = 90; // Up to 1.5 seconds at 60fps
+    let rafId: number;
+
+    const attemptRestore = () => {
+      if (!mainElement) return;
+      mainElement.scrollTop = targetScrollTop;
+
+      const currentScroll = mainElement.scrollTop;
+      const maxScroll = mainElement.scrollHeight - mainElement.clientHeight;
+
+      // Stop trying if we are close to the target, or reached the bottom limits of the current container height, or exceeded max attempts
+      if (
+        Math.abs(currentScroll - targetScrollTop) < 2 ||
+        (targetScrollTop > maxScroll && Math.abs(currentScroll - maxScroll) < 2) ||
+        attempts >= maxAttempts
+      ) {
+        isRestoringRef.current = false;
+      } else {
+        attempts++;
+        rafId = requestAnimationFrame(attemptRestore);
+      }
+    };
+
+    // Observe element resize to re-apply scroll when dynamic asynchronous components finish loading
+    const resizeObserver = new ResizeObserver(() => {
+      if (mainElement) {
+        mainElement.scrollTop = targetScrollTop;
+      }
+    });
+
+    resizeObserver.observe(mainElement);
+    rafId = requestAnimationFrame(attemptRestore);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+    };
   }, [location.pathname]);
 
   const handleLogout = async () => {

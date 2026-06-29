@@ -5,6 +5,7 @@ import { type Habit } from '../hooks/useHabits';
 import { type Goal } from '../hooks/useGoals';
 import { type CalendarEvent } from '../hooks/useCalendarEvents';
 import { calculateProductivityScore } from '../utils/productivityEngine';
+import { parseTaskDueDate } from '../utils/dateParser';
 
 export interface FocusSession {
   id: string;
@@ -148,11 +149,43 @@ interface DataContextType {
   aiMessages: Message[];
   setAiMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   aiInput: string;
-  setAiInput: (val: string) => void;
+  setAiInput: React.Dispatch<React.SetStateAction<string>>;
   aiSearchQuery: string;
-  setAiSearchQuery: (val: string) => void;
+  setAiSearchQuery: React.Dispatch<React.SetStateAction<string>>;
   aiScrollTop: number;
-  setAiScrollTop: (val: number) => void;
+  setAiScrollTop: React.Dispatch<React.SetStateAction<number>>;
+  aiPinnedExpanded: boolean;
+  setAiPinnedExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  aiRecentExpanded: boolean;
+  setAiRecentExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  aiInputCursorPos: number;
+  setAiInputCursorPos: React.Dispatch<React.SetStateAction<number>>;
+
+  // Tasks Page Preserved State
+  tasksView: 'list' | 'kanban';
+  setTasksView: React.Dispatch<React.SetStateAction<'list' | 'kanban'>>;
+  tasksFilter: 'all' | 'active' | 'ai-generated' | 'completed';
+  setTasksFilter: React.Dispatch<React.SetStateAction<'all' | 'active' | 'ai-generated' | 'completed'>>;
+  tasksSelectedTaskId: string | null;
+  setTasksSelectedTaskId: React.Dispatch<React.SetStateAction<string | null>>;
+  tasksActiveTab: 'subtasks' | 'timer' | 'notes' | 'activity' | 'ai';
+  setTasksActiveTab: React.Dispatch<React.SetStateAction<'subtasks' | 'timer' | 'notes' | 'activity' | 'ai'>>;
+
+  // Finance Page Preserved State
+  financeFilterType: 'all' | 'income' | 'expense';
+  setFinanceFilterType: React.Dispatch<React.SetStateAction<'all' | 'income' | 'expense'>>;
+  financeFilterCategory: string;
+  setFinanceFilterCategory: React.Dispatch<React.SetStateAction<string>>;
+  financeFilterPeriod: 'all' | 'today' | 'week' | 'month';
+  setFinanceFilterPeriod: React.Dispatch<React.SetStateAction<'all' | 'today' | 'week' | 'month'>>;
+  financeFilterMethod: string;
+  setFinanceFilterMethod: React.Dispatch<React.SetStateAction<string>>;
+  financeSearchQuery: string;
+  setFinanceSearchQuery: React.Dispatch<React.SetStateAction<string>>;
+
+  // Calendar Page Preserved State
+  calendarWeekOffset: number;
+  setCalendarWeekOffset: React.Dispatch<React.SetStateAction<number>>;
 
   // Finance
   transactions: Transaction[];
@@ -216,6 +249,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [aiInput, setAiInput] = useState('');
   const [aiSearchQuery, setAiSearchQuery] = useState('');
   const [aiScrollTop, setAiScrollTop] = useState(0);
+  const [aiPinnedExpanded, setAiPinnedExpanded] = useState<boolean>(true);
+  const [aiRecentExpanded, setAiRecentExpanded] = useState<boolean>(true);
+  const [aiInputCursorPos, setAiInputCursorPos] = useState<number>(0);
+
+  // Tasks Page Preserved State
+  const [tasksView, setTasksView] = useState<'list' | 'kanban'>('list');
+  const [tasksFilter, setTasksFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
+  const [tasksSelectedTaskId, setTasksSelectedTaskId] = useState<string | null>(null);
+  const [tasksActiveTab, setTasksActiveTab] = useState<'subtasks' | 'timer' | 'notes' | 'activity' | 'ai'>('subtasks');
+
+  // Finance Page Preserved State
+  const [financeFilterType, setFinanceFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [financeFilterCategory, setFinanceFilterCategory] = useState<string>('All');
+  const [financeFilterPeriod, setFinanceFilterPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [financeFilterMethod, setFinanceFilterMethod] = useState<string>('All');
+  const [financeSearchQuery, setFinanceSearchQuery] = useState<string>('');
+
+  // Calendar Page Preserved State
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState<number>(0);
 
   // Finance states
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -643,6 +695,59 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           createdAt: t.created_at,
         };
         setTasks((prev) => [newTask, ...prev]);
+
+        // Auto-create calendar event if task has a valid due date
+        if (newTask.due && newTask.due !== 'No due date') {
+          const selectedDate = parseTaskDueDate(newTask.due);
+          if (selectedDate && !isNaN(selectedDate.getTime())) {
+            // Monday of current week
+            const today = new Date();
+            let currentDay = today.getDay();
+            const diffToMonday = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+            const mondayOfCurrentWeek = new Date(today);
+            mondayOfCurrentWeek.setDate(diffToMonday);
+            mondayOfCurrentWeek.setHours(0, 0, 0, 0);
+
+            // Monday of selected week
+            let selectedDay = selectedDate.getDay();
+            const diffToSelectedMonday = selectedDate.getDate() - selectedDay + (selectedDay === 0 ? -6 : 1);
+            const mondayOfSelectedWeek = new Date(selectedDate);
+            mondayOfSelectedWeek.setDate(diffToSelectedMonday);
+            mondayOfSelectedWeek.setHours(0, 0, 0, 0);
+
+            const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+            const diffMs = mondayOfSelectedWeek.getTime() - mondayOfCurrentWeek.getTime();
+            const weekOffset = Math.round(diffMs / oneWeekMs);
+
+            const startHour = selectedDate.getHours() + selectedDate.getMinutes() / 60;
+
+            try {
+              const responseEvent = await fetch('/api/events', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  title: `[Task] ${newTask.text}`,
+                  start: startHour,
+                  duration: 1.0,
+                  day: selectedDate.getDay(),
+                  color: 'var(--accent-blue)',
+                  type: 'focus',
+                  weekOffset: weekOffset
+                }),
+              });
+              if (responseEvent.ok) {
+                const newEv = await responseEvent.json();
+                setEvents((prev) => [...prev, newEv]);
+              }
+            } catch (eventErr) {
+              console.error('Failed to auto-create calendar event for task:', eventErr);
+            }
+          }
+        }
+
         return newTask;
       }
     } catch (err) {
@@ -684,6 +789,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setTasks((prev) =>
           prev.map((item) => (item.id === id ? mapped : item))
         );
+
+        // Delete associated calendar events if task is completed
+        if (mapped.done) {
+          const taskTextLower = mapped.text.toLowerCase().trim();
+          const eventsToDelete = events.filter(e => {
+            const titleLower = e.title.toLowerCase().trim();
+            return titleLower === `[task] ${taskTextLower}` || titleLower === `[rescue] ${taskTextLower}`;
+          });
+          for (const ev of eventsToDelete) {
+            try {
+              await deleteEvent(ev.id);
+            } catch (e) {
+              console.error('Error deleting associated calendar event:', e);
+            }
+          }
+        }
+
         return mapped;
       }
     } catch (err) {
@@ -1767,6 +1889,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setAiSearchQuery,
         aiScrollTop,
         setAiScrollTop,
+        aiPinnedExpanded,
+        setAiPinnedExpanded,
+        aiRecentExpanded,
+        setAiRecentExpanded,
+        aiInputCursorPos,
+        setAiInputCursorPos,
+        tasksView,
+        setTasksView,
+        tasksFilter,
+        setTasksFilter,
+        tasksSelectedTaskId,
+        setTasksSelectedTaskId,
+        tasksActiveTab,
+        setTasksActiveTab,
+        financeFilterType,
+        setFinanceFilterType,
+        financeFilterCategory,
+        setFinanceFilterCategory,
+        financeFilterPeriod,
+        setFinanceFilterPeriod,
+        financeFilterMethod,
+        setFinanceFilterMethod,
+        financeSearchQuery,
+        setFinanceSearchQuery,
+        calendarWeekOffset,
+        setCalendarWeekOffset,
         transactions,
         loadingTransactions,
         addTransaction,

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useGoals } from '../hooks/useGoals';
 import { useHabits } from '../hooks/useHabits';
+import { callGeminiWithRetry } from '../utils/aiClient';
 import './BrainDumpPage.css';
 
 type ParsedItem = { text: string; type: 'task' | 'goal' | 'habit'; priority: string; icon: string };
@@ -17,12 +18,12 @@ export default function BrainDumpPage() {
   const { addGoal } = useGoals();
   const { addHabit } = useHabits();
 
-  const processDump = () => {
+  const processDump = async () => {
     if (!input.trim()) return;
     setIsProcessing(true);
     setSaved(false);
 
-    setTimeout(() => {
+    const runFallback = () => {
       const items = input.split(/[,.;\n]+/).map(s => s.trim()).filter(Boolean);
       const parsed: ParsedItem[] = items.map(item => {
         const lower = item.toLowerCase();
@@ -39,8 +40,74 @@ export default function BrainDumpPage() {
         return { text: item, type: 'task', priority: 'medium', icon: '📝' };
       });
       setResults(parsed);
+    };
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn('VITE_GEMINI_API_KEY is not defined. Using local fallback.');
+        runFallback();
+        return;
+      }
+
+      const prompt = `You are "Nova", an elite productivity coach and organization assistant.
+The user has input a raw "brain dump" containing random thoughts, tasks, habits, and goals they want to organize:
+"${input}"
+
+Please organize this brain dump into a JSON array of individual actionable items.
+Rules:
+1. Categorize each item as either a 'task' (a one-off action), 'goal' (a longer term aspiration or milestone), or 'habit' (a recurring routine or practice).
+2. Assign a priority of 'high', 'medium', or 'low'.
+3. Select a single appropriate emoji icon for the item.
+4. Clean up, correct, and nicely capitalize the text (e.g. change "math exam preparation" to "Prepare for Math Exam").
+5. Only output a valid JSON array, containing objects with these exact fields:
+   - "text": string (cleaned text)
+   - "type": "task" | "goal" | "habit"
+   - "priority": "high" | "medium" | "low"
+   - "icon": string (single emoji)
+
+Example output format:
+[
+  {"text": "Submit physics assignment", "type": "task", "priority": "high", "icon": "📝"},
+  {"text": "Go to the gym", "type": "habit", "priority": "medium", "icon": "🔄"},
+  {"text": "Master React and TypeScript", "type": "goal", "priority": "medium", "icon": "🎯"}
+]`;
+
+      const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+        }
+      };
+
+      const data = await callGeminiWithRetry(apiKey, requestBody);
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      let cleanText = text.trim();
+      if (cleanText.startsWith('```json')) {
+        cleanText = cleanText.substring(7);
+      }
+      if (cleanText.startsWith('```')) {
+        cleanText = cleanText.substring(3);
+      }
+      if (cleanText.endsWith('```')) {
+        cleanText = cleanText.substring(0, cleanText.length - 3);
+      }
+      cleanText = cleanText.trim();
+      
+      const parsed: ParsedItem[] = JSON.parse(cleanText);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setResults(parsed);
+      } else {
+        throw new Error('Invalid JSON format or empty array received');
+      }
+    } catch (err) {
+      console.error('AI Brain Dump processing error, using local fallback:', err);
+      runFallback();
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
   };
 
   const saveAll = async () => {

@@ -175,9 +175,27 @@ export default function TasksPage() {
   const { tasks, loading, user, addTask, toggleTask, deleteTask, updateTask } = useTasks();
   const { addFocusSession, focusSessions, goals, habits } = useDataContext();
   
-  const [view, setView] = useState<'list' | 'kanban'>('list');
-  const [filter, setFilter] = useState<'all' | 'active' | 'ai-generated' | 'completed'>('all');
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const {
+    tasksView: view,
+    setTasksView: setView,
+    tasksFilter: filter,
+    setTasksFilter: setFilter,
+    tasksSelectedTaskId,
+    setTasksSelectedTaskId,
+    tasksActiveTab: activeTab,
+    setTasksActiveTab: setActiveTab
+  } = useDataContext();
+
+  const selectedTask = tasks.find(t => t.id === tasksSelectedTaskId) || null;
+  const setSelectedTask = (task: Task | null) => {
+    setTasksSelectedTaskId(task ? task.id : null);
+  };
 
   // Multi-Select Task States
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -220,9 +238,6 @@ export default function TasksPage() {
 
   // Active sync selected task
   const activeTask = selectedTask ? (tasks.find(t => t.id === selectedTask.id) || selectedTask) : null;
-
-  // Detail Panel Tabs
-  const [activeTab, setActiveTab] = useState<'subtasks' | 'timer' | 'notes' | 'activity' | 'ai'>('subtasks');
 
   // AI Assistant Tab States
   const [taskAnalyses, setTaskAnalyses] = useState<Record<string, any>>({});
@@ -824,7 +839,11 @@ Question: "${questionTextTrimmed}"`;
       setNewDue('');
       setNewSubtaskInput('');
       setShowAddModal(false);
-      showToast('Task created successfully', 'success');
+      if (createdTask && newDue) {
+        showToast('task added on google calendar', 'success');
+      } else {
+        showToast('Task created successfully', 'success');
+      }
     } catch (err) {
       showToast('Failed to create task.', 'warning');
     }
@@ -1124,6 +1143,29 @@ Question: "${questionTextTrimmed}"`;
         <div>
           <h2>✅ <span className="gradient-text">Tasks</span></h2>
           <p>Task management — organized, prioritized, and always on track.</p>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'rgba(59, 130, 246, 0.08)',
+            color: 'var(--accent-blue-light)',
+            border: '1px solid rgba(59, 130, 246, 0.15)',
+            borderRadius: 'var(--radius-full)',
+            padding: '4px 12px',
+            fontSize: '11px',
+            marginTop: '8px',
+            fontWeight: '600'
+          }}>
+            <span style={{
+              display: 'inline-block',
+              width: '6px',
+              height: '6px',
+              backgroundColor: 'var(--accent-blue)',
+              borderRadius: '50%',
+              boxShadow: '0 0 6px var(--accent-blue)'
+            }}></span>
+            Google Calendar Synced (All tasks will be created as tasks on that date and time in the google calendar as well)
+          </div>
         </div>
         <div className="page-header-actions">
           <div className="view-toggle">
@@ -2188,6 +2230,9 @@ Question: "${questionTextTrimmed}"`;
                     deleteTask(activeTask.id);
                     showToast('Task deleted successfully', 'success');
                     setSelectedTask(null);
+                    if ("Notification" in window && Notification.permission === "granted") {
+                      new Notification("NovaLife", { body: "Task deleted from Google Calendar!" });
+                    }
                   }
                   setShowDeleteConfirmModal(false);
                 }}

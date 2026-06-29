@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarEvents, type CalendarEvent } from '../hooks/useCalendarEvents';
 import { useTasks } from '../hooks/useTasks';
 import { CustomSelect } from '../components/ui/CustomSelect';
 import { useAuth } from '../context/AuthContext';
+import { useDataContext } from '../context/DataContext';
 import './CalendarPage.css';
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -67,6 +68,13 @@ export default function CalendarPage() {
   const { tasks, loading: tasksLoading } = useTasks();
   const navigate = useNavigate();
   const { updateUser } = useAuth();
+  const { calendarWeekOffset, setCalendarWeekOffset } = useDataContext();
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const handleDisconnectGoogle = async () => {
     try {
@@ -92,7 +100,8 @@ export default function CalendarPage() {
 
   
   const [view, setView] = useState<'week' | 'month' | 'day'>('week');
-  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+  const currentWeekOffset = calendarWeekOffset;
+  const setCurrentWeekOffset = setCalendarWeekOffset;
   const [selectedDayIndex, setSelectedDayIndex] = useState(new Date().getDay());
   const [currentMonthOffset, setCurrentMonthOffset] = useState(0);
 
@@ -494,6 +503,9 @@ export default function CalendarPage() {
       try {
         await deleteEvent(selectedEvent.id);
         setSelectedEvent(null);
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("NovaLife", { body: "Event deleted from Google Calendar!" });
+        }
       } catch (err) {
         alert('Failed to delete event.');
       }

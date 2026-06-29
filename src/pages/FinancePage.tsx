@@ -153,7 +153,17 @@ export default function FinancePage() {
     addBill,
     updateBill,
     deleteBill,
-    financialHealthScore
+    financialHealthScore,
+    financeFilterType: filterType,
+    setFinanceFilterType: setFilterType,
+    financeFilterCategory: filterCategory,
+    setFinanceFilterCategory: setFilterCategory,
+    financeFilterPeriod: filterPeriod,
+    setFinanceFilterPeriod: setFilterPeriod,
+    financeFilterMethod: filterMethod,
+    setFinanceFilterMethod: setFilterMethod,
+    financeSearchQuery: searchQuery,
+    setFinanceSearchQuery: setSearchQuery
   } = useDataContext();
 
   // Navigation / Modal States
@@ -202,12 +212,7 @@ export default function FinancePage() {
   const [billCategory, setBillCategory] = useState('Utilities');
   const [billRecurring, setBillRecurring] = useState(false);
 
-  // Search & Filter States
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterPeriod, setFilterPeriod] = useState<'all' | 'today' | 'week' | 'month'>('all');
-  const [filterMethod, setFilterMethod] = useState('All');
+  // Search & Filter States are bound to DataContext global state
 
   // Receipt Scanner States
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
