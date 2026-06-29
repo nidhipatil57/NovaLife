@@ -87,9 +87,7 @@ export default function AIAssistantPage() {
     aiInput: input,
     setAiInput: setInput,
     aiSearchQuery: searchQuery,
-    setAiSearchQuery: setSearchQuery,
-    aiScrollTop: chatScrollTop,
-    setAiScrollTop: setChatScrollTop
+    setAiSearchQuery: setSearchQuery
   } = useDataContext();
 
   const [isTyping, setIsTyping] = useState(false);
@@ -133,12 +131,6 @@ export default function AIAssistantPage() {
     }
   }, [isTyping]);
 
-  // Save scroll position on scroll
-  const handleScroll = () => {
-    if (chatAreaRef.current) {
-      setChatScrollTop(chatAreaRef.current.scrollTop);
-    }
-  };
 
   // Scroll to bottom by default on mount or when activeConvId changes
   useEffect(() => {
@@ -600,7 +592,7 @@ CRITICAL FORMATTING INSTRUCTIONS:
       {/* ─── Main Chat Window ─── */}
       <div className="ai-chat-main">
         {/* Chat Messages */}
-        <div className="ai-messages-area" ref={chatAreaRef} onScroll={handleScroll}>
+        <div className="ai-messages-area" ref={chatAreaRef}>
           {messages.length === 0 && !isTyping ? (
             <div className="empty-chat-coach" style={{ textAlign: 'center', margin: 'auto', padding: '40px', maxWidth: '500px' }}>
               <div className="ai-coach-logo" style={{ fontSize: '50px', marginBottom: '20px' }}>🤖</div>

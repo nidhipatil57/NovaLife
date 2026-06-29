@@ -425,6 +425,89 @@ const authenticateToken = (req, res, next) => {
 
 // ------------------- AUTHENTICATION ROUTES -------------------
 
+// Helper function to send welcome email and write to sent_emails.log
+async function sendWelcomeEmail(toEmail, userName) {
+  const subject = `Welcome to NovaLife, ${userName}! 🪐`;
+  const textContent = `Welcome to NovaLife, ${userName}!
+
+Thank you for joining our productivity ecosystem. We are excited to help you manage your tasks, goals, habits, and focus sessions.
+
+Here is a summary of what you can do:
+1. 🧠 AI Assistant: Get personal daily recommendations.
+2. 📋 Active Tasks: Keep track of your deadlines and priority tasks.
+3. 🔄 Habit Tracker: Maintain your daily streaks.
+4. 🎧 Focus Room: Immerse yourself in structured study/work environments.
+
+Launch your dashboard and let's get started:
+http://localhost:5000/dashboard
+
+Stay focused,
+The NovaLife Team 🪐`;
+
+  const htmlContent = `
+    <div style="font-family: 'Inter', sans-serif; background: #070B14; color: #F8FAFC; padding: 40px; border-radius: 12px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(255,255,255,0.08);">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <span style="font-size: 40px;">🪐</span>
+        <h2 style="margin-top: 10px; font-weight: 700; color: #ffffff;">Welcome to Nova<span style="background: linear-gradient(135deg, #60A5FA, #A78BFA); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Life</span></h2>
+      </div>
+      <p style="font-size: 15px; line-height: 1.6; color: #94A3B8;">Hi <strong>${userName}</strong>,</p>
+      <p style="font-size: 15px; line-height: 1.6; color: #94A3B8;">Thank you for joining our productivity ecosystem! We are excited to support you in managing your daily rhythm, keeping track of tasks, habits, and smashing your goals.</p>
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; padding: 20px; margin: 25px 0;">
+        <h4 style="margin: 0 0 12px 0; color: #ffffff; font-size: 14px;">🚀 Explore your workspace features:</h4>
+        <ul style="margin: 0; padding-left: 20px; color: #94A3B8; font-size: 14px; line-height: 1.8;">
+          <li>🧠 <strong>AI Assistant:</strong> Chat with your life coach for customized summaries.</li>
+          <li>📋 <strong>Active Tasks:</strong> See overdue & high-priority items at a glance.</li>
+          <li>🔄 <strong>Habits Tracker:</strong> Maintain your active daily routines.</li>
+          <li>🎧 <strong>Focus Rooms:</strong> Access customized ambient spaces with guided breathing.</li>
+        </ul>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="http://localhost:5000/dashboard" style="background: #3B82F6; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">Launch Dashboard</a>
+      </div>
+      <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.08); margin: 30px 0;" />
+      <p style="font-size: 12px; color: #64748B; text-align: center; margin: 0;">Stay focused,<br />The NovaLife Team 🪐</p>
+    </div>
+  `;
+
+  // Always log locally to file for verification
+  try {
+    const logPath = path.join(__dirname, '..', 'sent_emails.log');
+    const logEntry = `[${new Date().toISOString()}] To: ${toEmail} | Subject: ${subject}\n${textContent}\n--------------------------------------------------\n\n`;
+    fs.appendFileSync(logPath, logEntry);
+    console.log("Email written to sent_emails.log for verification.");
+  } catch (err) {
+    console.error('Failed to log email locally:', err);
+  }
+
+  // Attempt sending if SMTP credentials exist
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: `"NovaLife" <${process.env.SMTP_USER}>`,
+        to: toEmail,
+        subject: subject,
+        text: textContent,
+        html: htmlContent,
+      });
+      console.log(`Welcome email successfully sent to ${toEmail}`);
+    } catch (err) {
+      console.error('Failed to send SMTP email:', err);
+    }
+  } else {
+    console.log("SMTP credentials not configured. Welcome email logged to sent_emails.log only.");
+  }
+}
+
 // User Registration (Signup)
 app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password } = req.body;
@@ -454,6 +537,9 @@ app.post('/api/auth/signup', async (req, res) => {
     const token = jwt.sign({ id: newUser.id, email: newUser.email }, process.env.JWT_SECRET || 'fallback_secret', {
       expiresIn: '7d',
     });
+
+    // Send welcome email (async background task)
+    sendWelcomeEmail(newUser.email, newUser.name).catch(console.error);
 
     res.status(201).json({
       token,
@@ -544,14 +630,19 @@ app.post('/api/auth/google', async (req, res) => {
     // Find or create user in database
     let userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     let user;
+    let isNewUser = false;
 
     if (userResult.rows.length === 0) {
+      isNewUser = true;
       // Register new Google OAuth user (no password)
       const registerRes = await pool.query(
         'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, NULL) RETURNING id, name, email',
         [name, email.toLowerCase()]
       );
       user = registerRes.rows[0];
+
+      // Send welcome email (async background task)
+      sendWelcomeEmail(user.email, user.name).catch(console.error);
     } else {
       user = userResult.rows[0];
     }
@@ -563,6 +654,7 @@ app.post('/api/auth/google', async (req, res) => {
 
     res.json({
       token,
+      isNewUser,
       user: {
         uid: String(user.id),
         email: user.email,

@@ -193,7 +193,7 @@
 .form-group label {
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--text-secondary);
+  color: #ffffff !important;
 }
 
 .label-row {
@@ -515,7 +515,7 @@
 
 .schedule-field label {
   font-size: var(--text-sm);
-  color: var(--text-secondary);
+  color: #ffffff !important;
   font-weight: var(--font-medium);
 }
 

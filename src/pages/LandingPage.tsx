@@ -4,9 +4,7 @@ import HeroSection from '../components/landing/HeroSection';
 import LiveDemoSection from '../components/landing/LiveDemoSection';
 import SolutionSection from '../components/landing/SolutionSection';
 import FeaturesSection from '../components/landing/FeaturesSection';
-import RevolutionarySection from '../components/landing/RevolutionarySection';
 import PricingSection from '../components/landing/PricingSection';
-import CommunitySection from '../components/landing/CommunitySection';
 import Footer from '../components/landing/Footer';
 
 export default function LandingPage() {
@@ -18,9 +16,7 @@ export default function LandingPage() {
       <HeroSection onWatchDemoClick={() => setIsDemoOpen(true)} />
       <SolutionSection />
       <FeaturesSection />
-      <RevolutionarySection />
       <PricingSection />
-      <CommunitySection />
       <Footer />
 
       {isDemoOpen && (

@@ -19,7 +19,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password?: string) => Promise<User>;
   signup: (name: string, email: string, password?: string) => Promise<User>;
-  loginWithGoogle: (credential: string) => Promise<User>;
+  loginWithGoogle: (credential: string) => Promise<{ user: User; isNewUser: boolean }>;
   loginWithGitHub: () => Promise<User>;
   logout: () => Promise<void>;
   updateUser: (updatedUser: Partial<User>) => void;
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     localStorage.setItem('novalife_token', data.token);
     setUser(data.user);
-    return data.user;
+    return { user: data.user, isNewUser: !!data.isNewUser };
   };
 
   const loginWithGitHub = async () => {
