@@ -34,8 +34,8 @@ const ROOM_DEFS: Record<string, RoomDef> = {
     name: 'Lofi Study Cafe',
     icon: '☕',
     theme: 'cafe',
-    soundUrl: 'https://cdn.jsdelivr.net/gh/stu442/pomodoro-web@master/public/sounds/coffeeshop.mp3',
-    soundName: 'Warm Cafe & Keyboard Murmur',
+    soundUrl: 'https://cdn.jsdelivr.net/gh/karthiknvd/noctune@master/sounds/cafe.mp3',
+    soundName: 'Calm Lofi Cafe Ambience',
     description: 'Charming coffee shop background noise blended with simulated keyboard clicks.',
     recommendedWork: 'Reviewing code, planning tasks',
     effectiveness: '88% Efficiency',
@@ -46,8 +46,8 @@ const ROOM_DEFS: Record<string, RoomDef> = {
     name: 'Rainy Library',
     icon: '🌧️',
     theme: 'library',
-    soundUrl: 'https://cdn.jsdelivr.net/gh/YoyoZhang24/RelaX50@master/audios/rain.mp3',
-    soundName: 'Steady Rain against Glass',
+    soundUrl: 'https://cdn.jsdelivr.net/gh/karthiknvd/noctune@master/sounds/rain.mp3',
+    soundName: 'Calm library rain',
     description: 'A quiet archive room with heavy rain tapping against tall windows.',
     recommendedWork: 'Reading, heavy research, study',
     effectiveness: '92% Efficiency',
@@ -59,7 +59,7 @@ const ROOM_DEFS: Record<string, RoomDef> = {
     icon: '🌌',
     theme: 'space',
     soundUrl: 'https://cdn.jsdelivr.net/gh/karthiknvd/noctune@master/sounds/wind.mp3',
-    soundName: 'Cosmic Wind & Space Synth',
+    soundName: 'Soothing Deep Space Drone',
     description: 'Float in a silent orbit, enveloped by a calming stellar hum.',
     recommendedWork: 'Abstract math, UI design, brainstorming',
     effectiveness: '94% Efficiency',
@@ -67,36 +67,7 @@ const ROOM_DEFS: Record<string, RoomDef> = {
   }
 };
 
-interface MessageItem {
-  id: string;
-  author: string;
-  text: string;
-  time: string;
-  avatarColor: string;
-}
 
-const INITIAL_MOTIVATIONS: Record<string, MessageItem[]> = {
-  forest: [
-    { id: '1', author: 'ZenCoder', text: "Taking it one step at a time. The trees aren't rushing, neither should you.", time: 'Just now', avatarColor: 'linear-gradient(135deg, #10b981, #059669)' },
-    { id: '2', author: 'Clara_P', text: "Starting a 50m session on my report. Let's do this!", time: '2m ago', avatarColor: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
-    { id: '3', author: 'NatureLover', text: "The atmosphere in this forest room is so grounding.", time: '5m ago', avatarColor: 'linear-gradient(135deg, #f59e0b, #d97706)' },
-  ],
-  cafe: [
-    { id: '1', author: 'CaffeineRush', text: "Coffee is hot, keyboard is ready. Time to study.", time: 'Just now', avatarColor: 'linear-gradient(135deg, #844d36, #472615)' },
-    { id: '2', author: 'VibeCheck', text: "This ambient chatter makes me feel like I'm not alone. Super helpful!", time: '1m ago', avatarColor: 'linear-gradient(135deg, #ec4899, #db2777)' },
-    { id: '3', author: 'Dev_Sarah', text: "Debugging React hooks. Wish me luck!", time: '6m ago', avatarColor: 'linear-gradient(135deg, #10b981, #059669)' },
-  ],
-  library: [
-    { id: '1', author: 'Bookworm', text: "Deep studying history tonight. Silent study partners are the best!", time: 'Just now', avatarColor: 'linear-gradient(135deg, #6366f1, #4f46e5)' },
-    { id: '2', author: 'QuietGuy', text: "Shh... only coding. 🤐 Let's focus!", time: '4m ago', avatarColor: 'linear-gradient(135deg, #6b7280, #4b5563)' },
-    { id: '3', author: 'PhD_Hopeful', text: "Writing Chapter 3. Almost there.", time: '10m ago', avatarColor: 'linear-gradient(135deg, #f43f5e, #e11d48)' },
-  ],
-  space: [
-    { id: '1', author: 'Nebula', text: "We are all tiny, but our goals are infinite. Keep pushing!", time: 'Just now', avatarColor: 'linear-gradient(135deg, #a855f7, #7c3aed)' },
-    { id: '2', author: 'Stargazer', text: "No distractions out here. Just absolute focus.", time: '3m ago', avatarColor: 'linear-gradient(135deg, #06b6d4, #0891b2)' },
-    { id: '3', author: 'Apollo11', text: "T-minus 10 minutes to finish this essay.", time: '8m ago', avatarColor: 'linear-gradient(135deg, #ef4444, #dc2626)' },
-  ],
-};
 
 const RANDOM_TICKER_PHRASES = [
   "is focusing deeply",
@@ -123,6 +94,16 @@ const COACH_MESSAGES = [
   { time: 3000, text: "50 minutes. Your deep concentration is yielding great results." }
 ];
 
+const MOTIVATIONAL_QUOTES = [
+  { text: "Your focus determines your reality.", author: "Qui-Gon Jinn" },
+  { text: "Starve your distractions, feed your focus.", author: "Unknown" },
+  { text: "Focus is a muscle, and you are building it right now.", author: "NovaLife" },
+  { text: "Deep work is not about working more, it is about working deeply.", author: "Cal Newport" },
+  { text: "Only those who risk going too far can possibly find out how far one can go.", author: "T.S. Eliot" },
+  { text: "Simplicity is the ultimate sophistication.", author: "Leonardo da Vinci" },
+  { text: "One step at a time. One breath at a time. One session at a time.", author: "NovaLife" }
+];
+
 export default function FocusPage() {
   const { 
     focusSessions, 
@@ -137,6 +118,7 @@ export default function FocusPage() {
   // Navigation & Screen selection state
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<'setup' | 'active' | 'complete'>('setup');
+  const [isImmersive, setIsImmersive] = useState<boolean>(false);
 
   // Room parameters state
   const [secondsElapsed, setSecondsElapsed] = useState(0);
@@ -163,18 +145,15 @@ export default function FocusPage() {
   const [breathText, setBreathText] = useState<string>('Breathe In');
   const [breathStage, setBreathStage] = useState<'in' | 'hold' | 'out'>('in');
 
-  // Shared Motivation wall state
-  const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [inputText, setInputText] = useState<string>('');
   const [participantsCount, setParticipantsCount] = useState<number>(10);
 
   // Live Activity ticker
   const [tickerActivity, setTickerActivity] = useState<string>('Alex joined the quiet space.');
 
   // Toggles for focus features
-  const [isAICoachEnabled, setIsAICoachEnabled] = useState<boolean>(true);
-  const [isNotificationsEnabled] = useState<boolean>(true);
-  const [isWebBlockingEnabled, setIsWebBlockingEnabled] = useState<boolean>(false);
+  const isAICoachEnabled = true;
+  const isWebBlockingEnabled = false;
+  const isNotificationsEnabled = true;
 
   // Active Session states
   const [distractionsCount, setDistractionsCount] = useState<number>(0);
@@ -182,6 +161,11 @@ export default function FocusPage() {
   const [sessionNotes, setSessionNotes] = useState<string>('');
   const [notesDrawerOpen, setNotesDrawerOpen] = useState<boolean>(false);
   const [aiCoachMessage, setAICoachMessage] = useState<string>("Take a deep breath and settle in.");
+  const [quoteIdx, setQuoteIdx] = useState<number>(0);
+
+  useEffect(() => {
+    setQuoteIdx(Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length));
+  }, []);
 
   // Completion states
   const [completionSession, setCompletionSession] = useState<Partial<FocusSession> | null>(null);
@@ -240,6 +224,7 @@ export default function FocusPage() {
   const handleSessionCompleted = async () => {
     setIsTimerRunning(false);
     stopAudio();
+    setIsImmersive(false);
 
     // Release hosts blocking
     await syncWebsiteBlocker(false);
@@ -324,7 +309,6 @@ export default function FocusPage() {
     setShowCustomInput(false);
     setIsTimerRunning(false);
     setParticipantsCount(room.defaultCount);
-    setMessages(INITIAL_MOTIVATIONS[roomId] || []);
     setSessionGoal('');
     setIsBreathingMode(false);
   };
@@ -394,21 +378,7 @@ export default function FocusPage() {
     downloadAnchor.remove();
   };
 
-  const handlePostMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
 
-    const newMessage: MessageItem = {
-      id: Date.now().toString(),
-      author: 'You',
-      text: inputText.trim(),
-      time: 'Just now',
-      avatarColor: 'linear-gradient(135deg, var(--accent-blue, #3b82f6), #1d4ed8)',
-    };
-
-    setMessages(prev => [newMessage, ...prev]);
-    setInputText('');
-  };
 
   const setTimerPreset = (type: 'pomo' | 'deep' | 'break' | 'custom', seconds: number) => {
     setIsTimerRunning(false);
@@ -644,17 +614,10 @@ export default function FocusPage() {
   const timerProgress = initialSeconds > 0 ? (secondsLeft / initialSeconds) * 100 : 0;
   const strokeDashoffset = 502 - (502 * timerProgress) / 100;
 
-  // Render static mock avatars for pulsing active users
-  const mockAvatars = [
-    { initials: 'AH', color: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
-    { initials: 'TL', color: 'linear-gradient(135deg, #10b981, #059669)' },
-    { initials: 'MX', color: 'linear-gradient(135deg, #f59e0b, #d97706)' },
-    { initials: 'KP', color: 'linear-gradient(135deg, #a855f7, #7c3aed)' },
-    { initials: 'YJ', color: 'linear-gradient(135deg, #ec4899, #db2777)' },
-  ];
+
 
   return (
-    <div className={`focus-page ${selectedRoomId ? `in-room theme-${selectedRoomId}` : ''}`}>
+    <div className={`focus-page ${selectedRoomId ? `in-room theme-${selectedRoomId}` : ''} ${isImmersive ? 'immersive-active' : ''}`}>
       
       {/* Immersive Room Layout */}
       {selectedRoomId && activeRoom ? (
@@ -697,9 +660,16 @@ export default function FocusPage() {
             )}
           </div>
 
+          {/* Exit Immersive Button floating */}
+          {isImmersive && (
+            <button className="exit-immersive-btn" onClick={() => setIsImmersive(false)}>
+              ✕ Exit Full Screen
+            </button>
+          )}
+
           {/* Room Header bar */}
           <header className="room-header">
-            <button className="back-btn" onClick={() => { setSelectedRoomId(null); setSessionState('setup'); stopAudio(); syncWebsiteBlocker(false); }}>
+            <button className="back-btn" onClick={() => { setSelectedRoomId(null); setSessionState('setup'); setIsImmersive(false); stopAudio(); syncWebsiteBlocker(false); }}>
               ✕ Exit Room
             </button>
             <div className="room-title-section">
@@ -709,9 +679,14 @@ export default function FocusPage() {
                 <p className="room-desc-subtitle">{activeRoom.description}</p>
               </div>
             </div>
-            <div className="room-status-badge">
-              <span className="pulse-indicator"></span>
-              <span className="participants-count">{participantsCount} Active Focusers</span>
+            <div className="header-actions-group" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <button className="immersive-toggle-btn" onClick={() => setIsImmersive(true)}>
+                🖥️ Full Screen Focus
+              </button>
+              <div className="room-status-badge">
+                <span className="pulse-indicator"></span>
+                <span className="participants-count">{participantsCount} Active Focusers</span>
+              </div>
             </div>
           </header>
 
@@ -719,93 +694,10 @@ export default function FocusPage() {
           <div className="room-workspace-body">
             
             {sessionState !== 'complete' ? (
-              // 3-Column Immersive Focus Layout
+              // 3-Column              // 2-Column Swapped Layout (Timer Left, Cards Right)
               <main className="room-grid">
                 
-                {/* Left Column: Audio controls, Breathing, focusing list */}
-                <section className="room-panel room-left-panel">
-                  
-                  {/* Silent Workspace Audio */}
-                  <div className="room-card ambient-card">
-                    <h3>🎧 Silent Workspace Audio</h3>
-                    <p className="card-desc">Play calming loops to mask environmental noise and maintain absolute focus.</p>
-                    
-                    <div className="audio-controls-row">
-                      <button 
-                        className={`audio-toggle-btn ${isMuted ? 'muted' : 'playing'}`}
-                        onClick={() => setIsMuted(!isMuted)}
-                      >
-                        {isMuted ? '🔇 Muted' : '🔊 Playing Ambient'}
-                      </button>
-                      <div className="volume-slider-group">
-                        <span className="volume-icon">🔈</span>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max="1" 
-                          step="0.05" 
-                          value={ambientVolume}
-                          onChange={(e) => {
-                            setAmbientVolume(parseFloat(e.target.value));
-                            setIsMuted(false);
-                          }}
-                          className="volume-slider"
-                        />
-                        <span className="volume-icon">🔊</span>
-                      </div>
-                    </div>
-                    <p className="audio-status-name">Track: <em>{activeRoom.soundName}</em> {isAudioLoaded ? '(Loaded)' : '(Loading...)'}</p>
-                  </div>
-
-                  {/* Guided Breathing */}
-                  <div className="room-card breathing-card">
-                    <div className="card-header-toggle">
-                      <h3>🧘 Guided Breathing Guide</h3>
-                      <div className="toggle-switch-wrapper" onClick={() => setIsBreathingMode(!isBreathingMode)}>
-                        <div className={`toggle-switch-track ${isBreathingMode ? 'active' : ''}`}>
-                          <div className="toggle-switch-thumb"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="card-desc">Synchronize your breathing to relax your nervous system and expand cognitive endurance.</p>
-
-                    {isBreathingMode ? (
-                      <div className="breathing-session">
-                        <div className={`breathing-circle-outer stage-${breathStage}`}>
-                          <div className="breathing-circle-inner">
-                            <span className="breathing-text">{breathText}</span>
-                          </div>
-                        </div>
-                        <div className="breathing-tip">Follow the expanding and contracting circle.</div>
-                      </div>
-                    ) : (
-                      <div className="breathing-placeholder">
-                        <p>Toggle the breathing switch to display the pacing ring.</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Focusing Silently Glow Avatars */}
-                  <div className="room-card active-avatars-card">
-                    <h3>👥 Focusing Silently</h3>
-                    <div className="avatars-list">
-                      {mockAvatars.slice(0, Math.min(participantsCount - 1, mockAvatars.length)).map((av, idx) => (
-                        <div key={idx} className="avatar-circle-glowing" style={{ background: av.color }}>
-                          {av.initials}
-                        </div>
-                      ))}
-                      {participantsCount > mockAvatars.length + 1 && (
-                        <div className="avatar-circle-glowing count-extra">
-                          +{participantsCount - mockAvatars.length - 1}
-                        </div>
-                      )}
-                    </div>
-                    <p className="avatars-desc">Silent presence creates shared accountability while maintaining absolute privacy.</p>
-                  </div>
-
-                </section>
-
-                {/* Center Column: Timer & Controls */}
+                {/* Center Column: Timer & Controls (NOW ON LEFT) */}
                 <section className="room-panel room-center-panel">
                   <div className="room-card timer-main-card">
                     
@@ -879,32 +771,22 @@ export default function FocusPage() {
                           </select>
                         </div>
                       </div>
-
-                      {/* Extra feature toggles */}
-                      <div className="compact-toggles-row">
-                        <label className="compact-toggle-item">
-                          <input type="checkbox" checked={isAICoachEnabled} onChange={(e) => setIsAICoachEnabled(e.target.checked)} />
-                          <span>🤖 Coach</span>
-                        </label>
-                        <label className="compact-toggle-item">
-                          <input type="checkbox" checked={isWebBlockingEnabled} onChange={(e) => setIsWebBlockingEnabled(e.target.checked)} />
-                          <span>🚫 Website Blocker</span>
-                        </label>
-                      </div>
                     </div>
 
                     {/* Timer Visualizer */}
                     <div className="timer-visual-container">
-                      <svg className="timer-svg" width="200" height="200">
-                        <circle className="timer-circle-bg" cx="100" cy="100" r="80" strokeWidth="6" />
-                        <circle 
-                          className="timer-circle-progress" 
-                          cx="100" 
-                          cy="100" 
-                          r="80" 
-                          strokeWidth="6"
-                          style={{ strokeDashoffset }}
-                        />
+                      <svg className="timer-svg" viewBox="0 0 200 200" width="200" height="200">
+                        <g transform="rotate(-90 100 100)">
+                          <circle className="timer-circle-bg" cx="100" cy="100" r="80" strokeWidth="6" />
+                          <circle 
+                            className="timer-circle-progress" 
+                            cx="100" 
+                            cy="100" 
+                            r="80" 
+                            strokeWidth="6"
+                            style={{ strokeDashoffset }}
+                          />
+                        </g>
                       </svg>
                       <div className="timer-digits-overlay">
                         <span className="timer-countdown">{formatTime(secondsLeft)}</span>
@@ -981,45 +863,82 @@ export default function FocusPage() {
 
                 </section>
 
-                {/* Right Column: Shared Motivation wall */}
-                <section className="room-panel room-right-panel">
-                  <div className="room-card motivation-card">
-                    <h3>💬 Shared Motivation Wall</h3>
-                    <p className="card-desc">Write a brief goal, positive note, or victory to encourage your silent peers.</p>
+                {/* Left Column: Audio controls, Breathing, focusing list (NOW ON RIGHT) */}
+                <section className="room-panel room-left-panel">
+                  
+                  {/* Silent Workspace Audio */}
+                  <div className="room-card ambient-card">
+                    <h3>🎧 Silent Workspace Audio</h3>
+                    <p className="card-desc">Play calming loops to mask environmental noise and maintain absolute focus.</p>
+                    
+                    <div className="audio-controls-row">
+                      <button 
+                        className={`audio-toggle-btn ${isMuted ? 'muted' : 'playing'}`}
+                        onClick={() => setIsMuted(!isMuted)}
+                      >
+                        {isMuted ? '🔇 Muted' : '🔊 Playing Ambient'}
+                      </button>
+                      <div className="volume-slider-group">
+                        <span className="volume-icon">🔈</span>
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="1" 
+                          step="0.05" 
+                          value={ambientVolume}
+                          onChange={(e) => {
+                            setAmbientVolume(parseFloat(e.target.value));
+                            setIsMuted(false);
+                          }}
+                          className="volume-slider"
+                        />
+                        <span className="volume-icon">🔊</span>
+                      </div>
+                    </div>
+                    <p className="audio-status-name">Track: <em>{activeRoom.soundName}</em> {isAudioLoaded ? '(Loaded)' : '(Loading...)'}</p>
+                  </div>
 
-                    <form onSubmit={handlePostMessage} className="post-motivation-form">
-                      <input 
-                        type="text" 
-                        maxLength={80}
-                        placeholder="Share a positive note or goal (e.g. 'Crushing Calculus next!')"
-                        value={inputText}
-                        onChange={(e) => setInputText(e.target.value)}
-                        className="motivation-input"
-                      />
-                      <button type="submit" className="motivation-submit-btn">Post</button>
-                    </form>
+                  {/* Guided Breathing */}
+                  <div className="room-card breathing-card">
+                    <div className="card-header-toggle">
+                      <h3>🧘 Guided Breathing Guide</h3>
+                      <div className="toggle-switch-wrapper" onClick={() => setIsBreathingMode(!isBreathingMode)}>
+                        <div className={`toggle-switch-track ${isBreathingMode ? 'active' : ''}`}>
+                          <div className="toggle-switch-thumb"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="card-desc">Synchronize your breathing to relax your nervous system and expand cognitive endurance.</p>
 
-                    <div className="motivation-messages-container">
-                      {messages.map(msg => (
-                        <div key={msg.id} className="motivation-msg-item">
-                          <div className="msg-avatar-col">
-                            <div 
-                              className="msg-avatar" 
-                              style={{ background: msg.avatarColor }}
-                            >
-                              {msg.author.slice(0, 2).toUpperCase()}
-                            </div>
-                          </div>
-                          <div className="msg-content-col">
-                            <div className="msg-header">
-                              <span className="msg-author">{msg.author}</span>
-                              <span className="msg-time">{msg.time}</span>
-                            </div>
-                            <p className="msg-text">"{msg.text}"</p>
+                    {isBreathingMode ? (
+                      <div className="breathing-session">
+                        <div className={`breathing-circle-outer stage-${breathStage}`}>
+                          <div className="breathing-circle-inner">
+                            <span className="breathing-text">{breathText}</span>
                           </div>
                         </div>
-                      ))}
+                        <div className="breathing-tip">Follow the expanding and contracting circle.</div>
+                      </div>
+                    ) : (
+                      <div className="breathing-placeholder">
+                        <p>Toggle the breathing switch to display the pacing ring.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Motivational Quote Box */}
+                  <div className="room-card motivation-quote-card">
+                    <h3>✨ Focus Inspiration</h3>
+                    <div className="quote-content">
+                      <p className="quote-text">"{MOTIVATIONAL_QUOTES[quoteIdx]?.text}"</p>
+                      <span className="quote-author">— {MOTIVATIONAL_QUOTES[quoteIdx]?.author}</span>
                     </div>
+                    <button 
+                      className="quote-refresh-btn" 
+                      onClick={() => setQuoteIdx((prev) => (prev + 1) % MOTIVATIONAL_QUOTES.length)}
+                    >
+                      🔄 Next Quote
+                    </button>
                   </div>
                 </section>
 
@@ -1213,7 +1132,7 @@ export default function FocusPage() {
                       <span className="history-icon">{getRoomIcon(session.room || '')}</span>
                       <div>
                         <span className="history-title-lbl">{session.name}</span>
-                        <span className="history-date-sub">{new Date(session.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="history-date-sub">{getRoomName(session.room || '')} • {new Date(session.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
                     <div className="history-meta-col">
