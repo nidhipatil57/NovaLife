@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import VoiceAssistant from './VoiceAssistant';
 import './DashboardLayout.css';
 
 const navItems = [
@@ -235,6 +236,7 @@ export default function DashboardLayout() {
         </div>
         <Outlet />
       </main>
+      <VoiceAssistant />
     </div>
   );
 }
