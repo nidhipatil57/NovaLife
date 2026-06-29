@@ -26,6 +26,7 @@ import AIAssistantPage from './pages/AIAssistantPage';
 import BrainDumpPage from './pages/BrainDumpPage';
 import RescueModePage from './pages/RescueModePage';
 import FinancePage from './pages/FinancePage';
+import FocusRoomPage from './pages/FocusRoomPage';
 
 
 function ScrollToTop() {
@@ -62,6 +63,8 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+
+        <Route path="/focus/room/:roomId" element={<FocusRoomPage />} />
 
         {/* Dashboard Routes — Shared Layout with Sidebar */}
         <Route element={<DashboardLayout />}>
