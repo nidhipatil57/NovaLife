@@ -161,6 +161,18 @@
   gap: var(--space-6);
 }
 
+.dash-grid > .widget {
+  height: 290px;
+  max-height: 290px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.widget-tasks, .widget-score-home, .widget-deadlines {
+  height: 330px !important;
+  max-height: 330px !important;
+}
+
 /* ─── Widget Link ─── */
 .widget-link {
   font-size: var(--text-xs);
@@ -173,7 +185,14 @@
 .widget-link:hover { color: var(--accent-purple-light); }
 
 /* ─── Task List Compact ─── */
-.task-list-compact { display: flex; flex-direction: column; gap: var(--space-2); }
+.task-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 
 .task-row {
   display: flex;
@@ -237,7 +256,14 @@
 .score-mini-stats span { font-size: var(--text-xs); color: var(--text-tertiary); }
 
 /* ─── Deadline Compact ─── */
-.deadline-list-compact { display: flex; flex-direction: column; gap: var(--space-3); }
+.deadline-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 
 .deadline-row {
   display: flex; align-items: center; gap: var(--space-3);
@@ -255,7 +281,14 @@
 .dl-badge { font-size: 14px; animation: scalePulse 1.5s ease-in-out infinite; }
 
 /* ─── Goal Compact ─── */
-.goal-list-compact { display: flex; flex-direction: column; gap: var(--space-4); }
+.goal-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 
 .goal-row-top { display: flex; justify-content: space-between; margin-bottom: var(--space-2); font-size: var(--text-sm); color: var(--text-primary); }
 
@@ -586,4 +619,129 @@
 @keyframes floatAnim {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
+}
+
+/* ─── Horizontal AI Suggestions ─── */
+.horizontal-briefing {
+  margin-top: var(--space-8) !important;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.05) 0%, rgba(99, 102, 241, 0.03) 100%) !important;
+  border-color: rgba(6, 182, 212, 0.15) !important;
+  box-shadow: 0 8px 32px 0 rgba(6, 182, 212, 0.04) !important;
+  min-height: 180px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.insights-badge {
+  font-size: 9px;
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--accent-cyan-light, #22d3ee);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ai-suggestions-horizontal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.ai-suggestion-card-h {
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.ai-suggestion-card-h:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(6, 182, 212, 0.25);
+  transform: translateY(-2px);
+}
+
+.ai-suggestion-h-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-suggestion-h-header h5 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ai-icon-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(6, 182, 212, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.ai-suggestion-card-h p {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .ai-suggestions-horizontal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.habit-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Sleek custom scrollbars for dashboard widget lists */
+.task-list-compact::-webkit-scrollbar,
+.deadline-list-compact::-webkit-scrollbar,
+.goal-list-compact::-webkit-scrollbar,
+.habit-compact-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.task-list-compact::-webkit-scrollbar-track,
+.deadline-list-compact::-webkit-scrollbar-track,
+.goal-list-compact::-webkit-scrollbar-track,
+.habit-compact-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: 10px;
+}
+
+.task-list-compact::-webkit-scrollbar-thumb,
+.deadline-list-compact::-webkit-scrollbar-thumb,
+.goal-list-compact::-webkit-scrollbar-thumb,
+.habit-compact-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.task-list-compact::-webkit-scrollbar-thumb:hover,
+.deadline-list-compact::-webkit-scrollbar-thumb:hover,
+.goal-list-compact::-webkit-scrollbar-thumb:hover,
+.habit-compact-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
