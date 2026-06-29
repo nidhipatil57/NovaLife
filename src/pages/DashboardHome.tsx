@@ -17,8 +17,8 @@ export default function DashboardHome() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
 
-  const { tasks, loading: tasksLoading, toggleTask, user } = useTasks();
-  const { habits, loading: habitsLoading, toggleHabitDay } = useHabits();
+  const { tasks, loading: tasksLoading, user } = useTasks();
+  const { habits, loading: habitsLoading } = useHabits();
   const { goals, loading: goalsLoading } = useGoals();
   const { productivityScore, focusSessions, transactions, savingsGoals, financialHealthScore, bills } = useDataContext();
 
@@ -42,6 +42,11 @@ export default function DashboardHome() {
   const approachingCount = activeTasks.filter(t => t.due && t.due.toLowerCase().trim() !== 'no due date' && !isOverdue(t)).length;
 
   const totalTasksCount = tasks.length;
+
+  const unpaidBillsCount = useMemo(() => {
+    return (bills || []).filter((b: any) => !b.paid).length;
+  }, [bills]);
+
   const maxStreak = useMemo(() => {
     return habits.length > 0 ? Math.max(...habits.map(h => h.streak || 0), 0) : 0;
   }, [habits]);
@@ -76,8 +81,9 @@ export default function DashboardHome() {
           ) : (
             <p className="briefing-summary">
               You have <strong style={{ color: 'var(--accent-red-light)' }}>{highPriorityCount} active high-priority task{highPriorityCount !== 1 ? 's' : ''}</strong>,{' '}
-              <strong style={{ color: 'var(--accent-red)' }}>{overdueCount} task{overdueCount !== 1 ? 's' : ''} overdue</strong>, and{' '}
-              <strong style={{ color: 'var(--accent-orange-light)' }}>{approachingCount} deadline{approachingCount !== 1 ? 's' : ''} approaching</strong>.
+              <strong style={{ color: 'var(--accent-red)' }}>{overdueCount} task{overdueCount !== 1 ? 's' : ''} overdue</strong>,{' '}
+              <strong style={{ color: 'var(--accent-orange-light)' }}>{approachingCount} deadline{approachingCount !== 1 ? 's' : ''} approaching</strong>, and{' '}
+              <strong style={{ color: 'var(--accent-orange)' }}>{unpaidBillsCount} bill{unpaidBillsCount !== 1 ? 's' : ''} due</strong>.
             </p>
           )}
           <div className="briefing-stats">
@@ -107,13 +113,12 @@ export default function DashboardHome() {
 
       {/* Widget Grid */}
       <div className="dash-grid">
-        <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} toggleTask={toggleTask} />
+        <TaskWidgetCompact isLoading={tasksLoading} tasks={tasks} />
         <ScoreWidget score={productivityScore} totalTasks={totalTasksCount} focusHours={todayFocusHours} streak={maxStreak} />
         <DeadlineWidgetCompact tasks={tasks} />
         <FinanceWidgetCompact transactions={transactions} savingsGoals={savingsGoals} healthScore={financialHealthScore} bills={bills} />
         <GoalWidgetCompact isLoading={goalsLoading} goals={goals} />
-        <HabitWidgetCompact isLoading={habitsLoading} habits={habits} toggleHabitDay={toggleHabitDay} todayIndex={todayIndex} />
-        <AISuggestionsWidget activeTasks={activeTasks} />
+        <HabitWidgetCompact isLoading={habitsLoading} habits={habits} todayIndex={todayIndex} />
       </div>
 
       <AchievementsCelebrationWidget 
@@ -122,6 +127,14 @@ export default function DashboardHome() {
         habits={habits} 
         focusSessions={focusSessions} 
       />
+
+      <AISuggestionsWidget 
+        activeTasks={activeTasks}
+        overdueTasksCount={overdueCount}
+        maxStreak={maxStreak}
+        goals={goals}
+        todayFocusHours={todayFocusHours}
+      />
     </div>
   );
 }
@@ -129,11 +142,19 @@ export default function DashboardHome() {
 interface TaskWidgetProps {
   isLoading: boolean;
   tasks: any[];
-  toggleTask: (id: string, done: boolean) => void;
 }
 
-function TaskWidgetCompact({ isLoading, tasks, toggleTask }: TaskWidgetProps) {
-  const activeTasks = tasks.filter(t => !t.done).slice(0, 5);
+function TaskWidgetCompact({ isLoading, tasks }: TaskWidgetProps) {
+  const activeTasks = tasks
+    .filter(t => !t.done)
+    .sort((a, b) => {
+      const aDate = parseTaskDueDate(a.due);
+      const bDate = parseTaskDueDate(b.due);
+      if (aDate && bDate) return bDate.getTime() - aDate.getTime();
+      if (aDate) return -1;
+      if (bDate) return 1;
+      return 0;
+    });
 
   return (
     <div className="widget widget-tasks">
@@ -148,7 +169,7 @@ function TaskWidgetCompact({ isLoading, tasks, toggleTask }: TaskWidgetProps) {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No active tasks! 🎉</p>
         ) : (
           activeTasks.map(task => (
-            <div key={task.id} className={`task-row ${task.done ? 'done' : ''}`} onClick={() => toggleTask(task.id, !task.done)}>
+            <div key={task.id} className={`task-row ${task.done ? 'done' : ''}`} style={{ cursor: 'default' }}>
               <div className={`task-check-sm ${task.done ? 'checked' : ''}`}>{task.done && '✓'}</div>
               <span className="task-text-sm">{task.text}</span>
               <span className="task-due-sm">{task.due}</span>
@@ -219,26 +240,18 @@ function ScoreWidget({ score, totalTasks, focusHours, streak }: ScoreWidgetProps
 }
 
 function DeadlineWidgetCompact({ tasks }: { tasks: any[] }) {
-  const overdueTasks = tasks
-    .filter(t => !t.done && isOverdue(t))
-    .sort((a, b) => {
-      const aDate = parseTaskDueDate(a.due);
-      const bDate = parseTaskDueDate(b.due);
-      if (aDate && bDate) return aDate.getTime() - bDate.getTime();
-      return 0;
-    });
-
-  const upcomingUrgent = tasks
-    .filter(t => !t.done && !isOverdue(t) && (t.priority === 'critical' || t.priority === 'high'))
-    .sort((a, b) => {
-      const aDate = parseTaskDueDate(a.due);
-      const bDate = parseTaskDueDate(b.due);
-      if (aDate && bDate) return aDate.getTime() - bDate.getTime();
-      return 0;
-    })
-    .slice(0, 3);
-
-  const deadlines = [...overdueTasks, ...upcomingUrgent];
+  const deadlines = useMemo(() => {
+    return tasks
+      .filter(t => !t.done && (isOverdue(t) || t.priority === 'critical' || t.priority === 'high'))
+      .sort((a, b) => {
+        const aDate = parseTaskDueDate(a.due);
+        const bDate = parseTaskDueDate(b.due);
+        if (aDate && bDate) return bDate.getTime() - aDate.getTime();
+        if (aDate) return -1;
+        if (bDate) return 1;
+        return 0;
+      });
+  }, [tasks]);
 
   return (
     <div className="widget widget-deadlines">
@@ -275,7 +288,7 @@ interface GoalWidgetProps {
 }
 
 function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
-  const compactGoals = goals.filter(g => g.progress < 100).slice(0, 3);
+  const compactGoals = goals.filter(g => g.progress < 100);
 
   return (
     <div className="widget widget-goals">
@@ -309,109 +322,186 @@ function GoalWidgetCompact({ isLoading, goals }: GoalWidgetProps) {
 interface HabitWidgetProps {
   isLoading: boolean;
   habits: any[];
-  toggleHabitDay: (id: string, index: number) => void;
   todayIndex: number;
 }
 
-function HabitWidgetCompact({ isLoading, habits, toggleHabitDay, todayIndex }: HabitWidgetProps) {
-  const compactHabits = habits.slice(0, 4);
-  const daysShort = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+function HabitWidgetCompact({ isLoading, habits, todayIndex }: HabitWidgetProps) {
+  const compactHabits = habits; // Fit cleanly in fixed widget heights with scrolling
 
   return (
-    <div className="widget widget-habits" style={{ minWidth: '320px' }}>
+    <div className="widget widget-habits">
       <div className="widget-header">
         <h4>🔄 Habit Tracker</h4>
         <Link to="/habits" className="widget-link">View All →</Link>
       </div>
-      <div className="habit-mini-grid">
+      <div className="habit-compact-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
         {isLoading ? (
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '10px 0' }}>Syncing...</p>
         ) : compactHabits.length === 0 ? (
           <p style={{ color: 'var(--text-tertiary)', fontSize: 'var(--text-sm)', padding: '20px 0', textAlign: 'center' }}>No habits tracked.</p>
         ) : (
-          <>
-            <div className="mini-grid-header" style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(7, 1fr)', gap: '4px', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px', marginBottom: '8px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-              <span style={{ textAlign: 'left', fontWeight: 'bold' }}>Habit</span>
-              {daysShort.map((day, idx) => (
-                <span key={idx} className={`mini-grid-day-lbl ${idx === todayIndex ? 'today' : ''}`} style={idx === todayIndex ? { color: 'var(--accent-blue-light)', fontWeight: 'bold' } : undefined}>{day}</span>
-              ))}
-            </div>
-            <div className="mini-grid-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {compactHabits.map((h) => (
-                <div key={h.id} className="mini-grid-row" style={{ display: 'grid', gridTemplateColumns: '1.2fr repeat(7, 1fr)', gap: '4px', alignItems: 'center' }}>
-                  <span className="mini-habit-title" style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'left' }} title={h.name}>{h.name}</span>
-                  {h.week.map((done: boolean, idx: number) => (
-                    <div 
-                      key={idx}
-                      className={`mini-grid-cell ${done ? 'completed' : ''} ${idx === todayIndex ? 'today' : ''}`}
-                      onClick={() => toggleHabitDay(h.id, idx)}
-                      style={{ 
-                        height: '24px', 
-                        borderRadius: 'var(--radius-sm)', 
-                        border: '1px solid rgba(255,255,255,0.06)', 
-                        background: done ? (h.color || 'var(--accent-cyan)') : 'rgba(0,0,0,0.15)',
-                        boxShadow: done ? `0 0 8px ${h.color || 'var(--accent-cyan)'}` : 'none',
-                        color: 'white',
-                        fontSize: '10px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                      title={`Toggle ${h.name} for ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][idx]}`}
-                    >
-                      {done ? '✓' : ''}
-                    </div>
-                  ))}
+          compactHabits.map((h) => {
+            const isDoneToday = h.week && h.week[todayIndex];
+            return (
+              <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', marginRight: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={h.name}>
+                    {h.name}
+                  </span>
+                  <span style={{ fontSize: '9px', color: 'var(--text-tertiary)' }}>
+                    🔥 {h.streak || 0} day streak
+                  </span>
                 </div>
-              ))}
-            </div>
-          </>
+                <div style={{
+                  padding: '3px 8px',
+                  borderRadius: '20px',
+                  fontSize: '9.5px',
+                  fontWeight: 'bold',
+                  letterSpacing: '0.5px',
+                  textTransform: 'uppercase',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: isDoneToday ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)',
+                  border: `1px solid ${isDoneToday ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)'}`,
+                  color: isDoneToday ? 'var(--accent-green-light)' : 'var(--text-tertiary)',
+                  boxShadow: isDoneToday ? '0 0 8px rgba(16, 185, 129, 0.05)' : 'none',
+                  cursor: 'default'
+                }}>
+                  {isDoneToday ? '✓ Done' : '⏳ Pending'}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
-function AISuggestionsWidget({ activeTasks }: { activeTasks: any[] }) {
-  const urgentTask = activeTasks.find(t => t.priority === 'critical') || activeTasks[0];
+function AISuggestionsWidget({ 
+  activeTasks, 
+  overdueTasksCount, 
+  maxStreak, 
+  goals,
+  todayFocusHours
+}: { 
+  activeTasks: any[], 
+  overdueTasksCount: number, 
+  maxStreak: number, 
+  goals: any[],
+  todayFocusHours: number
+}) {
+  const urgentTask = activeTasks[0];
+
+  const taskInsight = useMemo(() => {
+    if (overdueTasksCount > 0) {
+      return {
+        title: "Backlog Priority",
+        icon: "⚠️",
+        text: `You have ${overdueTasksCount} overdue task${overdueTasksCount !== 1 ? 's' : ''}. We recommend focusing on "${urgentTask?.text || 'your next task'}" to clear your queue.`
+      };
+    } else if (activeTasks.length > 0) {
+      return {
+        title: "Sprint Focus",
+        icon: "🎯",
+        text: `You have ${activeTasks.length} active task${activeTasks.length !== 1 ? 's' : ''}. Your top priority is "${urgentTask?.text}". Try a deep focus sprint to finish it.`
+      };
+    } else {
+      return {
+        title: "Clear Horizon",
+        icon: "✨",
+        text: "You are all caught up on tasks! Consider adding a new task or planning a future savings goal."
+      };
+    }
+  }, [overdueTasksCount, activeTasks.length, urgentTask]);
+
+  const habitInsight = useMemo(() => {
+    if (maxStreak > 0) {
+      return {
+        title: "Habit Streak",
+        icon: "🔥",
+        text: `Outstanding! Your longest habit streak is at ${maxStreak} day${maxStreak !== 1 ? 's' : ''}. Keep the consistency going to build lasting routines.`
+      };
+    } else {
+      return {
+        title: "Routine Builder",
+        icon: "🔄",
+        text: "Start a simple daily habit like 'Drink Water' or 'Focus Sprint' to establish your baseline routine."
+      };
+    }
+  }, [maxStreak]);
+
+  const activeGoal = goals.find(g => g.progress < 100);
+  const goalInsight = useMemo(() => {
+    if (activeGoal) {
+      return {
+        title: "Goals Roadmap",
+        icon: "🏆",
+        text: `Your goal "${activeGoal.name}" is at ${activeGoal.progress}% progress. Break it down into subtasks to make it achievable.`
+      };
+    } else {
+      return {
+        title: "Vision Board",
+        icon: "🌟",
+        text: "No active goals in progress. Define a savings or study goal to give your sessions clear direction."
+      };
+    }
+  }, [activeGoal]);
+
+  const focusInsight = useMemo(() => {
+    if (todayFocusHours > 0) {
+      return {
+        title: "Deep Focus",
+        icon: "⏱️",
+        text: `You completed ${todayFocusHours}h of deep focus today! Your brain is in a high-retention state.`
+      };
+    } else {
+      return {
+        title: "Focus Block",
+        icon: "🌲",
+        text: "No focus sessions logged today. Try entering a Deep Work Forest room to isolate from distractions."
+      };
+    }
+  }, [todayFocusHours]);
 
   return (
-    <div className="widget widget-ai-suggestions">
+    <div className="widget widget-ai-suggestions horizontal-briefing">
       <div className="widget-header">
-        <h4>🤖 AI Suggestions</h4>
+        <h4>🤖 AI Daily Insights</h4>
+        <span className="insights-badge">Live Analytics</span>
       </div>
-      <div className="ai-suggestions-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
-          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-            <span className="ai-suggestion-icon">⚡</span>
-            <span>Peak Energy Window</span>
+      <div className="ai-suggestions-horizontal-grid">
+        <div className="ai-suggestion-card-h">
+          <div className="ai-suggestion-h-header">
+            <span className="ai-icon-circle">{taskInsight.icon}</span>
+            <h5>{taskInsight.title}</h5>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>Your highest energy levels occur between <strong>2 PM - 4 PM</strong>. Schedule critical assignments during this window.</p>
+          <p>{taskInsight.text}</p>
         </div>
 
-        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
-          <div className="ai-suggestion-header" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '12px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-            <span className="ai-suggestion-icon">🎯</span>
-            <span>Next Priority Sprint</span>
+        <div className="ai-suggestion-card-h">
+          <div className="ai-suggestion-h-header">
+            <span className="ai-icon-circle">{habitInsight.icon}</span>
+            <h5>{habitInsight.title}</h5>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 6px 0', lineHeight: '1.4' }}>
-            {urgentTask 
-              ? `Your highest priority task is "${urgentTask.text}". Take action now to reduce backlog risk.`
-              : "You're all caught up on tasks! Set a new goal or start a wellness habit."
-            }
-          </p>
-          <Link to="/focus" className="ai-start-now-btn" style={{ fontSize: '11px', color: 'var(--accent-blue-light)', fontWeight: 'bold', textDecoration: 'none', display: 'inline-block' }}>Start Now →</Link>
+          <p>{habitInsight.text}</p>
         </div>
 
-        <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
-          <div className="ai-suggestion-card" style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: 'var(--radius-lg)' }}>
-            <span className="ai-suggestion-icon">🧘</span>
-            <span>Habit Stacking Tip</span>
+        <div className="ai-suggestion-card-h">
+          <div className="ai-suggestion-h-header">
+            <span className="ai-icon-circle">{goalInsight.icon}</span>
+            <h5>{goalInsight.title}</h5>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>Complete a quick 5-min stretch right after a Pomodoro break to build physical resilience.</p>
+          <p>{goalInsight.text}</p>
+        </div>
+
+        <div className="ai-suggestion-card-h">
+          <div className="ai-suggestion-h-header">
+            <span className="ai-icon-circle">{focusInsight.icon}</span>
+            <h5>{focusInsight.title}</h5>
+          </div>
+          <p>{focusInsight.text}</p>
         </div>
       </div>
     </div>

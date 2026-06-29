@@ -841,13 +841,15 @@ export default function FocusPage() {
 
                   </div>
 
-                  {/* AI Coach Assistant Bubble */}
+                  {/* AI Assistant Card */}
                   {isAICoachEnabled && sessionState === 'active' && (
-                    <div className="ai-coach-bubble-card">
-                      <div className="coach-avatar">🤖</div>
-                      <div className="coach-bubble-text">
-                        <span className="coach-header-label">AI Focus Coach</span>
-                        <p>"{aiCoachMessage}"</p>
+                    <div className="room-card ai-assistant-card" style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.03) 100%)', borderColor: 'rgba(99, 102, 241, 0.15)' }}>
+                      <h3>🤖 AI Assistant</h3>
+                      <div className="ai-assistant-content" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                        <span className="assistant-icon-glow" style={{ fontSize: '24px', filter: 'drop-shadow(0 0 6px var(--accent-purple))' }}>🤖</span>
+                        <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: '1.4' }}>
+                          "{aiCoachMessage}"
+                        </p>
                       </div>
                     </div>
                   )}

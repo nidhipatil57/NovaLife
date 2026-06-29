@@ -140,12 +140,15 @@ export default function AIAssistantPage() {
     }
   };
 
-  // Restore scroll position on mount or when messages load
+  // Scroll to bottom by default on mount or when activeConvId changes
   useEffect(() => {
-    if (chatAreaRef.current && chatScrollTop > 0) {
-      chatAreaRef.current.scrollTop = chatScrollTop;
-    }
-  }, [activeConvId, messages.length]);
+    const scrollTimer = setTimeout(() => {
+      if (bottomRef.current) {
+        bottomRef.current.scrollIntoView({ behavior: 'auto' });
+      }
+    }, 80);
+    return () => clearTimeout(scrollTimer);
+  }, [activeConvId]);
 
   // Load initial conversation if available
   useEffect(() => {
