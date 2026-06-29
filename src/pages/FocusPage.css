@@ -376,7 +376,7 @@
 /* ─── Grid Layout ─── */
 .room-grid {
   display: grid;
-  grid-template-columns: 290px 1fr 340px;
+  grid-template-columns: 1fr 290px;
   gap: 20px;
   flex: 1;
   padding: 24px;
@@ -401,7 +401,7 @@
 
 /* ─── Card Base ─── */
 .room-card {
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.22);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
@@ -607,7 +607,7 @@
   justify-content: center;
   border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  height: 110px;
+  height: 140px;
   text-align: center;
   padding: 10px;
 }
@@ -616,6 +616,13 @@
   margin: 0;
   font-size: 11px;
   color: #475569;
+}
+
+.breathing-card {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 
@@ -738,16 +745,23 @@
   position: relative;
   width: 200px;
   height: 200px;
-  margin: 16px 0 24px 0;
+  margin: 16px auto 24px auto;
+  aspect-ratio: 1 / 1;
 }
 
 .timer-svg {
-  transform: rotate(-90deg);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .timer-circle-bg {
   fill: none;
   stroke: rgba(255, 255, 255, 0.03);
+  stroke-width: 6;
 }
 
 .timer-circle-progress {
@@ -756,6 +770,7 @@
   stroke-dasharray: 502;
   stroke-dashoffset: 0;
   stroke-linecap: round;
+  stroke-width: 6;
   transition: stroke-dashoffset 0.3s linear;
 }
 
@@ -769,6 +784,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .timer-countdown {
@@ -792,19 +808,21 @@
   display: flex;
   gap: 12px;
   width: 100%;
-  max-width: 320px;
-  margin-bottom: 20px;
+  max-width: 450px;
+  margin: 0 auto 20px auto;
+  justify-content: center;
 }
 
 .timer-control-btn {
   flex: 1;
   border: none;
-  padding: 12px 16px;
-  font-size: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
   font-weight: 750;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.25s ease;
+  white-space: nowrap;
 }
 
 .btn-main-action {
@@ -853,19 +871,21 @@
 
 /* ─── Setup settings integration inside room timer ─── */
 .room-session-setup-form {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 18px;
   width: 100%;
-  max-width: 420px;
-  margin-bottom: 16px;
+  max-width: 440px;
+  margin: 0 auto 24px auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.05);
 }
 
 .form-group-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
 .form-group {
@@ -874,36 +894,106 @@
 }
 
 .form-group label {
-  font-size: 9.5px;
-  color: var(--text-muted);
+  font-size: 10px;
+  color: var(--theme-accent, #10b981);
   text-transform: uppercase;
-  font-weight: 700;
-  margin-bottom: 4px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  letter-spacing: 0.06em;
 }
 
 .setup-select {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 12.5px;
+  padding: 10px 14px;
+  border-radius: 10px;
   outline: none;
-}
-
-.compact-toggles-row {
-  display: flex;
-  justify-content: space-around;
-  margin-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-  padding-top: 8px;
-}
-
-.compact-toggle-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+  padding-right: 36px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.setup-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(15, 23, 42, 0.85);
+  transform: translateY(-1px);
+}
+
+.setup-select:focus {
+  border-color: var(--theme-accent, #10b981);
+  box-shadow: 0 0 12px var(--theme-glow), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.setup-select option {
+  background: #0f172a;
+  color: #cbd5e1;
+  padding: 10px;
+  font-size: 12.5px;
+}
+
+/* ─── Motivational Quote Card ─── */
+.motivation-quote-card {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.quote-content {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quote-text {
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.quote-author {
+  font-size: 11px;
+  color: var(--theme-accent, #10b981);
+  font-weight: 700;
+  align-self: flex-end;
+  letter-spacing: 0.02em;
+}
+
+.quote-refresh-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: all 0.2s ease;
+}
+
+.quote-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .compact-toggle-item input {
@@ -1978,4 +2068,79 @@
   .room-panel {
     max-height: none;
   }
+}
+
+/* ─── Immersive Fullscreen Mode Styles ─── */
+.immersive-active .room-header {
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  border: none;
+}
+
+.immersive-active .room-left-panel {
+  display: none !important;
+}
+
+.immersive-active .room-grid {
+  grid-template-columns: 1fr !important;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 40px);
+}
+
+.immersive-active .room-center-panel {
+  max-width: 550px;
+  margin: auto;
+}
+
+.immersive-active .timer-main-card {
+  background: rgba(15, 23, 42, 0.12) !important;
+  backdrop-filter: blur(6px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.03) !important;
+  box-shadow: none !important;
+}
+
+.immersive-toggle-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.immersive-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.exit-immersive-btn {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  z-index: 1000;
+  font-weight: 700;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.exit-immersive-btn:hover {
+  background: rgba(15, 23, 42, 0.9);
+  transform: scale(1.03);
 }
