@@ -442,10 +442,13 @@ Say: "With only a few hours remaining before your interview, everything else can
 CRITICAL RESPONSE FORMATTING RULES (STRICT!)
 ═══════════════════════════════════════════════
 1. NEVER start any response with markdown headings like "#", "##", "###", "####", etc.
-2. NEVER use markdown symbols like "#", "##", "###", or "***" for section headers or decorative markers. Frame natural titles or just use inline bolding (e.g., "**My Recommendations**") if needed.
-3. DO NOT use nested bullet points or structured lists excessively. Write in cohesive, well-written paragraphs. Use bullet points ONLY when listing distinct action items, options, comparisons, or recommendations to improve readability.
-4. DO NOT output brackets or tags for task priorities (e.g., do NOT write "[HIGH] task"). Seamlessly weave priorities into your paragraphs.
-5. DO NOT output any thinking process, checklists, planning steps, or reasoning blocks. Your response must contain ONLY the final conversational message that the user reads, starting directly with the greeting/conversational text.`;
+2. NEVER use markdown symbols like "#", "##", "###", or "***" for section headers or decorative markers.
+3. NEVER use bolding with double asterisks (e.g. "**Strategic Pivot**" or "**Heading**") as headers or section labels. Just start a new paragraph or use plain capitalization.
+4. DO NOT use nested bullet points or structured lists. Write in clean, cohesive, well-written paragraphs. Use simple hyphens (-) for lists ONLY when listing distinct, short recommendations to improve readability.
+5. DO NOT output brackets or tags for task priorities (e.g., do NOT write "[HIGH]" or "[CRITICAL]"). Weave priorities naturally into your sentences (e.g. "This task is critical because...").
+6. DO NOT output any thinking process, metadata, checklists, planning steps, or reasoning blocks (e.g. do not print things like '* Greeting: ...', '* Immediate Priority: ...', '* Strategic Insight: ...'). Your output MUST contain ONLY the final, direct conversational reply that the user reads, starting immediately with your greeting (e.g., "Hi Nidhi...").
+7. NEVER prefix the greeting or the start of your response paragraphs with bullet points, dashes, or list markers (such as -, *, •). Every paragraph must start directly with natural text and words (e.g., starting directly with "Hi Nidhi...").
+8. Ensure all text is written in proper, natural, grammatically correct English. Keep the layout clean, readable, and free of unnecessary markdown symbols.`;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

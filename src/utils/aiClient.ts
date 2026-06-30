@@ -23,7 +23,12 @@ export async function callGeminiWithRetry(
     if (isRateLimitOrUnavailable) {
       console.warn("Gemini 2.5 Flash rate limited or unavailable. Falling back to gemma-4-31b-it...");
       try {
-        return await executeRequestWithRetry("gemma-4-31b-it", apiKey, body, maxRetries, initialDelayMs);
+        const cleanBody = { ...body };
+        if (cleanBody.generationConfig) {
+          cleanBody.generationConfig = { ...cleanBody.generationConfig };
+          delete cleanBody.generationConfig.responseMimeType;
+        }
+        return await executeRequestWithRetry("gemma-4-31b-it", apiKey, cleanBody, maxRetries, initialDelayMs);
       } catch (fallbackErr) {
         console.error("Fallback to gemma-4-31b-it failed:", fallbackErr);
         throw err; // throw original error if fallback also fails
@@ -105,7 +110,12 @@ export async function streamGeminiContent(
     if (isRateLimitOrUnavailable) {
       console.warn("Gemini 2.5 Flash rate limited or unavailable. Falling back to gemma-4-31b-it for streaming...");
       try {
-        return await executeStreamRequest("gemma-4-31b-it", apiKey, body, onChunk);
+        const cleanBody = { ...body };
+        if (cleanBody.generationConfig) {
+          cleanBody.generationConfig = { ...cleanBody.generationConfig };
+          delete cleanBody.generationConfig.responseMimeType;
+        }
+        return await executeStreamRequest("gemma-4-31b-it", apiKey, cleanBody, onChunk);
       } catch (fallbackErr) {
         console.error("Streaming fallback to gemma-4-31b-it failed:", fallbackErr);
         throw err;

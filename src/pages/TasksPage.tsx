@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTasks, type Task } from '../hooks/useTasks';
 import { parseTaskDueDate } from '../utils/dateParser';
 import { useDataContext } from '../context/DataContext';
-import { streamGeminiContent } from '../utils/aiClient';
+import { streamGeminiContent, callGeminiWithRetry } from '../utils/aiClient';
 import './TasksPage.css';
 
 const renderMarkdown = (text: string) => {
@@ -284,22 +284,25 @@ You MUST respond with a JSON object exactly matching this schema. Do not write a
 }
 `;
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
+      const requestBody = {
+        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      };
 
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+      const result = await callGeminiWithRetry(apiKey, requestBody);
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      
+      let parsed = {};
+      try {
+        parsed = JSON.parse(text.trim());
+      } catch (e) {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("Could not parse task analysis JSON: " + text);
+        }
       }
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-      const parsed = JSON.parse(text.trim());
       
       setTaskAnalyses(prev => ({
         ...prev,
@@ -484,6 +487,7 @@ Question: "${questionTextTrimmed}"`;
     setTimerIsRunning(false);
     setShowSaveSessionBox(false);
     setStudySessionName('');
+    setLoadingAnalysis(false);
     if (timerIntervalId) {
       clearInterval(timerIntervalId);
       setTimerIntervalId(null);
