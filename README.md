@@ -41,7 +41,7 @@ The result is increased stress, missed deadlines, reduced productivity, and poor
 
 ---
 
-# 💡 My Solution
+# 💡 Solution Overview
 
 NovaLife is an AI-powered Productivity Operating System designed to act as an intelligent digital Chief-of-Staff.
 
@@ -149,7 +149,7 @@ Provides personalized productivity recommendations by learning from user behavio
 
 ---
 
-# 🛠 TECH STACKS
+# 🛠 TECHNOLOGIES USED
 
 | Layer | Technology |
 |--------|------------|
@@ -167,7 +167,7 @@ Provides personalized productivity recommendations by learning from user behavio
 
 ---
 
-# ☁ Google Technologies Used
+# ☁ Google Technologies Utilized
 
 ## Google Gemini API
 
