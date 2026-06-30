@@ -202,9 +202,10 @@ export default function VoiceAssistant() {
   };
 
   // Speaks out text
-  const speakText = (text: string) => {
-    if (isMutedRef.current) {
-      // If muted, restart listening after a short reading window delay
+  const speakText = (text: string | undefined | null) => {
+    const safeText = text || '';
+    if (isMutedRef.current || !safeText.trim()) {
+      // If muted or empty, restart listening after a short reading window delay
       setTimeout(() => {
         if (isOpen) {
           startListening();
@@ -215,7 +216,7 @@ export default function VoiceAssistant() {
 
     window.speechSynthesis.cancel();
     // Strip emojis out of text for cleaner synthesis
-    const cleanText = text.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "");
+    const cleanText = safeText.replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "");
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.onend = () => {
@@ -277,7 +278,19 @@ export default function VoiceAssistant() {
 
 
       // 2. Build history contents
-      const chatHistory = [...activeConversationRef.current, { role: 'user', text: commandText }];
+      const rawHistory = [
+        ...activeConversationRef.current,
+        { role: 'user' as const, text: commandText }
+      ].filter(h => h && typeof h.text === 'string' && h.text.trim() !== '');
+
+      const chatHistory: { role: 'user' | 'model'; text: string }[] = [];
+      let nextExpectedRole: 'user' | 'model' = 'user';
+      rawHistory.forEach(h => {
+        if (h.role === nextExpectedRole) {
+          chatHistory.push(h);
+          nextExpectedRole = nextExpectedRole === 'user' ? 'model' : 'user';
+        }
+      });
       
       const systemPrompt = `You are "Nova", the global voice assistant for NovaLife. You are a premium AI productivity coach.
 The current real-world date and time is: ${formattedDateTime}.
@@ -336,7 +349,8 @@ Intent Param Schemas:
 CRITICAL FORMATTING:
 1. Speak natural, conversational English as a premium AI productivity coach.
 2. If an action is successfully matched, confirm it immediately with a quick, elegant summary (e.g. "I've added the expense of ₹450 under Food.").
-3. Your response must contain ONLY the valid JSON object. No preambles, no explanation text outside the JSON.`;
+3. NEVER start the response text with bullet points, dashes, lists, or asterisks. Always start directly with natural words.
+4. Your response must contain ONLY the valid JSON object. No preambles, no explanation text outside the JSON.`;
 
       const requestBody = {
         systemInstruction: {
@@ -370,7 +384,11 @@ CRITICAL FORMATTING:
         }
       }
 
-      const { response, action, params, followUp, navigate: navigatePath } = payload;
+      const response = payload.response || payload.message || payload.text || payload.speech || "Request processed successfully.";
+      const action = payload.action || null;
+      const params = payload.params || {};
+      const followUp = !!payload.followUp;
+      const navigatePath = payload.navigate || null;
 
       setAiResponse(response);
       setStatus('answering');
@@ -408,10 +426,10 @@ CRITICAL FORMATTING:
 
     } catch (err: any) {
       console.error("Voice process error:", err);
-      const errMsg = "Sorry, I had trouble processing that request. Please try again.";
+      const errMsg = `Sorry, I had trouble processing that request: ${err.message || 'Unknown error'}. Please try again.`;
       setAiResponse(errMsg);
       setStatus('idle');
-      speakText(errMsg);
+      speakText("Sorry, I had trouble processing that request.");
     }
   };
 
