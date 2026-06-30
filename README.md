@@ -319,7 +319,7 @@ NovaLife is designed for:
 
 # ❤️ Vision
 
-Our vision is to create an AI operating system that becomes every person's intelligent productivity partner.
+My vision is to create an AI operating system that becomes every person's intelligent productivity partner.
 
 Rather than replacing human decision-making, NovaLife augments it—helping people focus on meaningful work while AI handles planning, scheduling, prioritization, and execution assistance.
 
