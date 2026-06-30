@@ -1,148 +1,328 @@
+
+<div align="center">
+
 # 🚀 NovaLife
-An AI productivity companion that doesn't just remind — it actively plans, prioritizes, and helps users execute before deadlines are missed. A personal intelligence platform  designed for students, professionals, and entrepreneurs.
 
-----------------------------------------------------------------------------------------------
+### AI Productivity Operating System & Intelligent Life Companion
 
-📌 Overview
+*Plan smarter. Focus deeper. Execute faster.*
 
-Last-Minute Life Saver AI is an intelligent productivity platform designed to help students, professionals, and entrepreneurs stay ahead of deadlines and commitments.
 
-Unlike traditional task managers that only send passive reminders, our AI actively analyzes schedules, predicts risks, prioritizes tasks, and creates personalized action plans to ensure important work gets completed on time.
+<br>
 
-Whether it's an assignment, interview preparation, bill payment, project submission, meeting, or personal goal, the platform acts like a personal AI productivity coach and chief-of-staff, helping users make better decisions and take meaningful action.
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Express](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql)
+![Google Gemini](https://img.shields.io/badge/Google-Gemini-4285F4?style=for-the-badge&logo=google)
+![Google Calendar](https://img.shields.io/badge/Calendar-Integrated-4285F4?style=for-the-badge&logo=googlecalendar)
 
-----------------------------------------------------------------------------------------------
+</div>
+
+---
+
+
+# 🎯 Problem Statement
+
+Modern productivity applications have evolved very little over the past decade.
+
+They help users create task lists, calendars, and reminders—but they rarely help users **actually complete their work**.
+
+As responsibilities increase, people face several challenges:
+
+- Priorities constantly change throughout the day.
+- Deadlines become overwhelming.
+- Manual scheduling consumes valuable time.
+- Important work gets buried beneath smaller tasks.
+- Traditional reminder systems only notify users—they don't help recover when plans fail.
+- Productivity tools operate independently instead of understanding the user's overall workload.
+
+The result is increased stress, missed deadlines, reduced productivity, and poor work-life balance.
+
+---
+
+# 💡 My Solution
+
+NovaLife is an AI-powered Productivity Operating System designed to act as an intelligent digital Chief-of-Staff.
+
+Instead of waiting for users to manually organize their day, NovaLife continuously understands priorities, analyzes deadlines, predicts scheduling conflicts, and creates personalized execution strategies.
+
+Powered by Google's Gemini AI and deeply integrated with the Google ecosystem, NovaLife transforms scattered tasks into structured daily execution plans.
+
+Rather than asking:
+
+> **"What should I work on next?"**
+
+NovaLife already knows.
+
+It continuously evaluates:
+
+- Task urgency
+- Estimated effort
+- Calendar availability
+- Productivity trends
+- Upcoming deadlines
+- User workload
+
+to generate intelligent recommendations that help users stay ahead instead of catching up.
+
+---
 
 # ✨ Key Features
 
-🧠 Smart Task Prioritization
-AI ranks tasks based on urgency, importance, effort, and deadline risk.
 
+## 🧠 AI Priority Engine
 
-📅 AI Scheduling
-Automatically creates personalized schedules and allocates time slots for tasks.
+Analyzes every task using multiple parameters including urgency, importance, effort, and deadline proximity to automatically generate intelligent priority rankings.
 
+---
 
-⚠️ Deadline Risk Detection
-Predicts the likelihood of missing deadlines and alerts users early.
+## 📅 Smart Schedule Generator
 
+Creates optimized daily schedules that automatically allocate time blocks based on available calendar slots and workload.
 
-🚨 Rescue Mode
-Generates an emergency action plan when deadlines are at risk.
+---
 
+## ⚠️ Deadline Prediction Engine
 
-🔔 Context-Aware Reminders
-Provides actionable reminders based on task progress and urgency.
+Predicts potential deadline failures before they occur, allowing users to take corrective action early.
 
+---
 
-🎯 Goal & Habit Tracking
-Breaks long-term goals into achievable milestones and tracks habits.
+## 🚨 Rescue Mode
 
+When deadlines become critical, NovaLife dynamically reorganizes schedules, reprioritizes work, and creates an actionable recovery plan.
 
-🎙️ Voice Assistant
-Manage tasks, schedules, and priorities using natural voice commands.
+---
 
+## 🎙 AI Voice Assistant
 
-📧 Smart Task Extraction
-Automatically creates tasks from emails, messages, and calendar events.
+Manage your productivity naturally using conversational voice commands.
 
+Examples:
 
-🔄 Calendar Integration
-Syncs with calendars to avoid conflicts and optimize scheduling.
+- "Schedule my interview preparation."
+- "What's my highest priority today?"
+- "Move my meeting to tomorrow."
+- "How productive was I this week?"
 
+---
 
-📊 Productivity Analytics
-Tracks productivity score, focus hours, completion rate, and deadline trends.
+## 📊 Productivity Dashboard
 
+Monitor overall productivity using intelligent analytics including:
 
-🤖 AI Productivity Coach
-Delivers personalized recommendations to improve focus, planning, and efficiency.
+- Productivity Score
+- Focus Time
+- Goal Progress
+- Completion Rate
+- Deadline Health
+- Weekly Insights
 
-----------------------------------------------------------------------------------------------
+---
 
-# 🏗️ System Architecture
-<pre>
-User Input
-(Text / Voice / Email / Calendar)
-          │
-          ▼
- AI Task Extraction Engine
-          │
-          ▼
- Priority & Risk Analyzer
-          │
-          ▼
- Smart Scheduler
-          │
-          ▼
- Productivity Coach
-          │
-          ▼
+## 🎯 Goal & Habit Tracking
+
+Break long-term ambitions into structured milestones while tracking consistency and daily progress.
+
+---
+
+## 📧 Smart Task Extraction
+
+Automatically detects actionable tasks from emails, notes, and calendar events, reducing manual work.
+
+---
+
+## 🔔 Context-Aware Notifications
+
+Instead of generic reminders, NovaLife delivers intelligent suggestions based on current workload and available time.
+
+Example:
+
+> "You have a 90-minute free window before your next meeting. This is the ideal time to complete your assignment."
+
+---
+
+## 🤖 AI Productivity Coach
+
+Provides personalized productivity recommendations by learning from user behavior and work patterns.
+
+---
+
+# 🛠 TECH STACKS
+
+| Layer | Technology |
+|--------|------------|
+| Frontend | React 19, TypeScript, Vite |
+| Backend | Node.js, Express.js |
+| Database | PostgreSQL |
+| Authentication | JWT Authentication |
+| AI Processing | Google Gemini API |
+| Calendar Integration | Google Calendar API |
+| Animation | Framer Motion, GSAP |
+| 3D Experience | Three.js |
+| Email Services | Nodemailer |
+| Deployment | Google Cloud Run |
+| Development | Google AI Studio |
+
+---
+
+# ☁ Google Technologies Used
+
+## Google Gemini API
+
+The intelligence behind NovaLife.
+
+Gemini understands natural language tasks, generates personalized schedules, prioritizes workloads, powers the AI assistant, and provides productivity recommendations in real time.
+
+---
+
+## Google Calendar API
+
+Provides seamless synchronization between NovaLife and users' Google Calendar.
+
+Automatically creates, updates, and reorganizes calendar events whenever schedules change.
+
+---
+
+## Google OAuth
+
+Secure authentication using Google Sign-In, enabling personalized experiences across devices.
+
+---
+
+## Google Cloud Run
+
+Hosts NovaLife's containerized backend with automatic scaling, HTTPS support, and production-ready deployment.
+
+---
+
+## Google AI Studio
+
+Used for prompt engineering, testing AI workflows, evaluating Gemini responses, and rapidly iterating on productivity intelligence.
+
+---
+
+# 🏗 System Architecture
+
+```text
+                User
+                  │
+                  ▼
+      Task / Voice / Calendar Input
+                  │
+                  ▼
+        Google Gemini AI Engine
+                  │
+      ┌───────────┼────────────┐
+      │           │            │
+      ▼           ▼            ▼
+Priority      Risk Engine   AI Coach
+Engine
+      │
+      ▼
+Smart Schedule Generator
+      │
+      ▼
+Google Calendar Sync
+      │
+      ▼
  Dashboard & Notifications
-</pre>
-----------------------------------------------------------------------------------------------
+```
 
-# 🎨 User Flow
-<pre>
- Create Task
-      ↓
+---
+
+# 🚀 AI Workflow
+
+```text
+Capture Tasks
+      │
+      ▼
 AI Understands Context
-      ↓
-Priority Calculation
-      ↓
-Schedule Generation
-      ↓
-Progress Monitoring
-      ↓
+      │
+      ▼
+Priority Analysis
+      │
+      ▼
 Risk Prediction
-      ↓
-Rescue Mode (if required)
-      ↓
-Successful Completion ✅
-  </pre>
-----------------------------------------------------------------------------------------------
+      │
+      ▼
+Schedule Optimization
+      │
+      ▼
+Calendar Synchronization
+      │
+      ▼
+Continuous Progress Monitoring
+      │
+      ▼
+AI Rescue Mode (if required)
+```
 
-# How the AI acts — core user flow
-1. Capture
-User adds task via voice, text, or email forward. AI extracts deadline, effort estimate, dependencies, and category automatically using NLP.
+---
 
-2. Triage & score
-AI assigns an urgency score (deadline × impact × effort). Cross-references calendar to detect conflicts. Groups tasks into a prioritized daily plan.
+# 🚀 Quick Start
 
-3. Schedule & block time
-Auto-inserts focus blocks into the calendar for high-priority items. Sends context-aware pre-task nudges ("Your assignment is due in 4 hours — you have a 90-min gap at 2 PM").
+### Clone Repository
 
-4. Escalate & act
-If a task remains incomplete near deadline, the AI escalates: drafts an extension request email, reschedules lower-priority tasks, or triggers a last-resort push notification with a concrete 15-minute micro-plan.
+```bash
+git clone https://github.com/nidhipatil57/NovaLife.git
 
-5. Learn & improve
-Tracks what worked. Refines estimates, reschedules patterns, and updates the user's productivity profile for smarter future planning.
+cd NovaLife
 
-----------------------------------------------------------------------------------------------
+npm install
+```
 
-# 🛠️ Tech Stack
-<pre>
-<h3>Frontend</h3>
-React.js
-Next.js
-TypeScript
-Tailwind CSS
-Framer Motion
-ShadCN UI
+### Configure Environment Variables
 
-<h3>Backend</h3>
-Node.js
-Express.js
-Database
-PostgreSQL
+```env
+GOOGLE_CLIENT_ID=
 
-<h3>Authentication</h3>
-Firebase Authentication
-AI & Machine Learning
-Gemini API
-OpenAI API
-Integrations
-Google Calendar API
-Gmail API
-Outlook API
-</pre>
+GOOGLE_CLIENT_SECRET=
+
+GEMINI_API_KEY=
+
+DATABASE_URL=
+
+JWT_SECRET=
+```
+
+### Start Development Server
+
+```bash
+npm run dev
+```
+
+Open
+
+```
+http://localhost:5173
+```
+
+---
+
+
+# 🎯 Target Users
+
+NovaLife is designed for:
+
+- 👨‍🎓 Students
+- 👩‍💻 Software Engineers
+- 👨‍💼 Professionals
+- 🚀 Startup Founders
+- 🎨 Creators
+- 📚 Researchers
+- 💼 Freelancers
+- 📈 Entrepreneurs
+
+---
+
+# ❤️ Vision
+
+Our vision is to create an AI operating system that becomes every person's intelligent productivity partner.
+
+Rather than replacing human decision-making, NovaLife augments it—helping people focus on meaningful work while AI handles planning, scheduling, prioritization, and execution assistance.
+
+> **"Your life deserves more than reminders. It deserves intelligence."**
+
+---
